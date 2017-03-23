@@ -10,3 +10,4 @@
 *.png
 ~*
 talk_figures/*
+.dropbox
