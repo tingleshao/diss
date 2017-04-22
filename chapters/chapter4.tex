@@ -1,1 +1,141 @@
 \chapter{AR}
+\section{Introduction}
+\label{sec:intro}
+
+In this modern age of the Internet of Things (IoT), it is now possible to literally glue tiny computers to everyday objects, so that they can sense, react, and tell their own stories. The IoT community has embraced wireless standards such as Bluetooth Low Energy (BLE) and developed programmable `beacon' devices that periodically broadcast a small amount of preloaded data, while lasting for multiple years on a coin-cell battery. Broadcast messages from beacon devices typically contain information about an object, a location, a web-resource, or just an arbitrary string. This connectionless mode of BLE does not require a receiver to pair/bond or connect to a sender, and hence, there is no overhead of connection setup and no inconvenience of requiring a user to enter pins and passwords. These broadcast messages are received by a BLE capable mobile device to obtain relevant information just-in-time and on-the-spot.  Emerging applications of beacon devices include advertising merchandise in retail stores, identifying late passengers at the airports, authorizing people at the hospitals, smarter signage, indoor navigation, and tracking moving platforms like airline cargo containers, computers on wheels, museum artworks, or even humans.
+
+
+The enabling technology behind these applications is the ability of a beacon to simply broadcast a few bytes of data (called UUID) as BLE 4.0 advertisement packets at a rate of less than 16 bytes/sec. The bound in data rate comes from the lifetime requirement of these devices. Such a tight budget on payload size and the maximum data rate have limited a beacon's capability to only be able to broadcast an identifier or a small amount of text (effectively $\sim$18 bytes). The next generation BLE 5.0 beacon is expected to have an 8X increase in broadcasting capacity ($\sim$256 bytes). Such an increase opens up the possibility to design beacons that can serve larger assets. We are particularly interested to know --- \emph{whether BLE beacons are capable of storing and broadcasting data structures describing 3D objects, so that nearby mobile devices are able to receive and render those virtual objects onto the real-world, and to have a seamless mobile augmented reality experience}. It turns out that the answer is --- \emph{yes}, but in designing such a system, we need to deal with at least two fundamental challenges. Before we dig into their details, let us look at the benefits of a beacon-based mobile augmented reality system.
+
+There are several advantages of having an augmented reality system that consists primarily of a set of BLE beacons. First, the system will be \textbf{low cost.} Compared to today's \$3,000 augmented reality headsets, a beacon-based infrastructure will be several orders of magnitude cheaper. Second, beacons would store 3D objects locally and broadcast them over connection-less advertising channels \textbf{without requiring any Internet connectivity}. This makes the system simpler and in many cases hassle-free as cellular signals indoors is often unusable and connecting to free WiFi often requires accepting too many agreement pop-ups and occasionally watching an advertisement video. Third, beacons are designed to \textbf{last for a long time} with battery power, which makes these systems easier to setup and maintain when compared to wall power or frequent battery replacements. Fourth, in many modern buildings, \textbf{beacons are already in place}. Setting up a mobile augment reality system in those buildings would practically cost nothing.
+
+
+%, e.g., simple html pages or thumbnail images.
+%e.g., an image, carried by connectionless BLE advertisement packets. However, even a simple $72\times 72$ PNG image, such as the Android launcher icon, has a size of over 3KB. To store and broadcast this image, either we require to use a dozen of BLE 5.0 beacons, or we will have to accept a very long image transmission and loading time.
+
+%Image compression is a natural way to deal with this problem. Existing image compression algorithms, however, fail to achieve the desired compression ratio for an image to be broadcasted over BLE. Hence, a fundamental challenge toward realizing an image beacon is to devise an algorithm that efficiently represents an image using as few bits as possible, while taking into account the application-driven limits on the number of usable beacons per image, broadcast message size, data rate, latency, and lifetime. In an earlier work~\cite{shaoyears}, we devised an image beacon system that broadcasts binary images of a few limited categories (e.g., handwritten characters) only. This paper is a continuation to that line of work, but this time, we have taken a harder challenge, i.e., to develop a beacon system that works for color images, e.g., images taken with a mobile phone.
+
+The main challenges in any augmented reality systems are: 1) communication of 3D object data that includes visual features, textures, rendering information, and a time series of these objects in case of video, and 2) the location and pose of the viewer so that the object can be overlayed on the real-world at the correct location and orientation. Furthermore, in case of mobile augmented reality, as the user moves, the object needs to be reoriented and redrawn based on his current position. For a seamless experience, all these has to happen in real-time as well. BLE beacons, to some extents, provide support for both storage and localization. There have been ongoing investigation on BLE's capabilities to store complex data structures such as images~\cite{shaoyears}. Recently, Google started to experiment with an idea called \textit{`Fat Beacons'}, where they are looking into broadcasting html pages over BLE. Indoor localization and navigation using BLE signals~\cite{zhuang2016smartphone, martin2014ibeacon} is another active area of research. In this paper, we decide to combine these two promising aspects of BLE to enable more than what we have achieved with beacons so far.
+
+%Emerging applications of beacon devices include advertising merchandise in retail stores~\cite{pierdicca2015low}, identifying late passengers at the airports, authorizing people at the hospitals, smarter signage, indoor navigation~\cite{martin2014ibeacon}, and tracking moving platforms like airline cargo containers, computers on wheels, museum artworks, or even humans~\cite{conte2014bluesentinel}. The enabling technology behind these applications is the ability of a beacon device to simply broadcast a few bytes of data (called UUID) as BLE advertisement packets at a rate of less than 16 bytes/sec. The bound in data rate comes from the lifetime requirement of these devices. Such tight budgets on payload and maximum data rate has limited a beacon device's capability to only be able to broadcast an identifier or a small amount of text (about 16--18 bytes). To transmit a moderate sized image, either we require to use hundreds of beacon devices, or we will have to accept a very long transmission delay.
+
+%Hypothetically, if we could broadcast high-resolution images from a beacon device in real-time, the technology would enable even more powerful and feature rich applications. Like the web has evolved from serving hypertexts to streaming multimedia contents, we envision that the natural successor of a beacon device would be the one that broadcasts images, while meeting the same energy and lifetime requirement. Applications of such an image beacon system would be in scenarios where there is no Internet connectivity but there is a need for storing and broadcasting information that can be best described by an image. Potential applications of beacon image systems include coordinating rescue workers in disaster areas, creating a bread-crumb system for adventurous hikers and mountaineers, remote surveillance (when coupled with a camera), or even a simple system just to let someone know that `I was here'.
+
+
+%Being able to broadcast images from beacons enables more powerful and feature rich applications than the ones supported by today's beacons. We envision that like the web has evolved from serving hypertexts to streaming multimedia contents, the natural successor of today's beacon devices would be the ones that broadcast images. Applications of image beacons would be in scenarios where there is no Internet connectivity but there is a need for storing and broadcasting information that can be best described by an image. For example, coordinating rescue workers in disaster areas, creating a bread-crumb system for adventurous hikers and mountaineers, remote surveillance (when coupled with a camera), or even a simple system just to let someone know that `We were here'.  Recently, Google started to experiment with an idea called \textit{`Fat Beacons'}, where they are looking into broadcasting html pages over BLE. However, for lack of a suitable image compression technique, the pages do not support images.
+
+%Our work will complement such efforts.
+
+%In this paper, we chase this seemingly impossible goal of creating a beacon device that efficiently broadcasts images over a long period. As a first step toward realizing an image beacon, we explore the challenges to broadcasting binary images of different categories (e.g., alpha-numeric characters, basic shapes, and arbitrary binary images), and design algorithms to efficiently store contents of an image inside a set of beacon devices. The set of beacons simultaneously broadcasts chunks of an image over BLE, which are captured by a mobile device to reconstruct the image. A fundamental challenge toward achieving this is to efficiently represent an image using as few bits as possible. Standard image compression algorithms are not good enough to archive the required compression ratio so that an image can be stored inside a beacon. We investigate image approximation/coding techniques that take into account the limits on number of beacon devices, number of bits available in a beacon device, data rate, latency, and lifetime. Based on empirical analysis, we devise a patch-based image approximation algorithm which greatly reduces the image data while keeping the image distortion under a threshold. We investigate the tradeoffs between the image quality and the power consumption to determine the best set of parameters for the system under user-specified constraints.
+
+%In this paper, we chase this seemingly impossible goal of creating an image beacon system that efficiently broadcasts color images, carried by BLE broadcast messages, over an extended period of time. We propose a self-contained system that stores and broadcasts actual image contents as opposed to IDs, links, or URLs of an image. We assume availability of no additional information on the broadcasted image from any other sources -- globally (on the web) or locally (on a user's smartphone that receives the broadcast).
+
+In this paper, we chase this seemingly impossible goal of creating the first mobile augmented reality infrastructure that is based primarily on a set of low-cost BLE beacon devices. Our target application is a motion capture scenario where a user (e.g. an actor, a doctor, or a lecturer) would enter into an area being monitored and make natural gestures while a distributed camera system would capture his motions. Later these captured movements can be replayed and viewed in 3D for various types of post-facto analysis purposes such as training and skill improvement.
+
+We propose a self-contained system that consists of a cluster of BLE beacon units that are connected to an embedded micro-controller and a low-cost stereo camera. Once the system is installed and set up, it operates in two phases. The first phase is dedicated to detecting dynamic events in the area being monitored and to capture and store sufficient information abut moving objects or subjects in the scene. This information is compressed, stored, and broadcasting while meeting the storage and expected lifetime requirement of the system. The second phase is dedicated to receiving and rendering the 3D virtual objects and placing them at the right location and at right scale as a viewer moves and looks at the scene through his smartphone.
+
+%The crux of the system is an algorithm that analyzes an image to identify its `important' semantic regions (as defined by the user or the use case) and then encodes them differently than the rest of the image to reduce the overall image size. The image data are written to and read from the image beacon system using a smartphone application, which runs the proposed compression and rendering algorithms. We use the term `beacon system' instead of `a beacon', since a compressed image may still require more than one physical beacons to ensure its acceptable quality. Allowing multiple beacons per image makes the system flexible. It widens our scope for optimizations and helps satisfy users who are willing to dedicate more beacons for better results. Besides, until BLE 5.0 is available, we need to simulate its broadcast capacity with multiple BLE 4.0 devices anyways.
+
+The crux of the system are two algorithms that are central to the two phases of the system. The first of which intelligently determines 1) a least number of most informative and useful visual features, and 2) a minimal amount of information about the moving parts of a 3D object, and store this extremely compressed information into the limited storage of the beacons. The second algorithm utilizes the BLE signal strength and combines it with the user's smartphone's IMU and camera images to accurate estimate his position and the orientation in real-time.
+
+
+%a standard JPEG image, converts it to binary format, and shows the user a preview of the compressed image to be written. The user is allowed to change the settings (e.g., the number of available beacons and/or expected device lifetime) and the app immediately shows the best possible compressed image under these constraints.
+
+%We have developed a prototype of an image beacon system using a set of commercially available Estimote beacons~\cite{ESTIMOTE}, and developed an Android application that takes images of an object of interest along with user-specified requirements and constraints on broadcasting the image as inputs, generates previews of the image to be written, writes the image representation into a set of beacons, and reads the broadcasted image back. Figure~\ref{fig:beacons} shows an example scenario where a user snaps photos of a gnome statue which he is interested in broacasting. The smartphone application performs image processing on the phone to produce multiple versions of broadcast image. The user selects one of these compressed images that satisfies his requirements (e.g. available beacons, image quality, lifetime, and image loading latency). The user is allowed to change his requirements and the app immediately shows options for the best possible compressed images under those constraints. The application writes the image data into the beacon system and the image is broadcasted by the beacons. A reader application reads the broadcasted image and displays it on the phone.
+
+We have developed a prototype of the system, called the MARBLE, that consists of eight Estimote beacons~\cite{ESTIMOTE} connected to eight Raspberry Pis~\cite{RPI}, each having two Arducam~\cite{ARDUCAM} cameras attached to it. The prototype has been thoroughly tested to quantify its CPU and memory usage, as well as the accuracy of feature selection and localization algorithms. We demonstrate MARBLE by setting up an indoor motion capture scenario where 10 volunteers make five types of gestures for about three seconds while the system captures and stores their motions. Later, they enter the scene, walk around, and view the captured actions in 3D through their mobile phones.
+
+The main contributions of this paper are as follows:
+
+
+%We perform an in-depth evaluation of the beacon system. We describe a set of results showing the tradeoffs between system lifetime and image quality, when the image type and the number of beacons are varied. We also deploy an image beacon system indoors, and perform a user study in a real-world scenario in order to have a subjective measure of the quality of the received images, where a group of $20$ participants are asked to identify objects from their beaconed images of various resolutions, and locate it among a set of similar looking objects in the real-world.
+
+%\begin{itemize}[leftmargin=10pt]
+	%\vspace{-0.25em}
+	%\item To the best of our knowledge, we are the first to propose a BLE beacon-based mobile augmented reality system.
+
+	%\vspace{-0.25em}
+%	\item We devise two algorithms: 1) an algorithm that determines a least number of most informative and useful visual features, and a minimal amount of information about the moving parts of a 3D object, and 2) an algorithm that utilizes the BLE signal strength and combines it with the user's smartphone's IMU and camera images to accurate estimate his position and the orientation in real-time.
+
+%	\item We have developed and evaluated a prototype of the proposed system. Our evaluation shows that the system takes about 170ms to capture an object's motion, 613ms to render the scene, the selected features are 95\%-100\% accurate in determining the reference view, and the mean localization error is 14.5 cm.
+
+%	\item We conduct a user study involving 10 participants and demonstrate that they system is capable of capturing free hand gestures and when replayed back, the users were able to view and experience them in real-time.
+
+%\end{itemize}
+
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Generic Problem Setting}
+
+The problem is formally stated as: given an image $\mathrm{x}$ (where each pixel is represented by $\mathrm{b}$ bit) having the dimensions of $\mathrm{N \times M}$, the number of available beacon devices $\mathrm{K}$, the payload size of each beacon packet $\mathrm{C}$ bytes, the maximum allowable broadcast rate of $\mathrm{R}$ packets/sec, and the maximum allowable latency for an image $\mathrm{T}$, the objective is to find an approximate representation of the image $\mathrm{\hat{x}}$ so that the lifetime $\mathrm{\tau}$ of the beacon system is maximized while the approximation ratio $\mathrm{\lambda(x, \hat{x}) \in [0,1]}$ of the image is high ($\mathrm{\lambda = 1}$ means no distortion). Now, for a single beacon, the broadcast rate:
+\begin{equation}
+	\mathrm{R = \bigg( \frac{bNM}{8C} \bigg) \frac{1}{T}}
+	\label{eq:1}
+\end{equation}
+
+For K beacons, considering $\log K$ overhead bits for addressing the beacons, and $K$ times more payload capacity:
+\begin{equation}
+	\mathrm{R = \bigg( \frac{bNM + \log K}{8CK} \bigg)  \frac{1}{T}}
+	\label{eq:2}
+\end{equation}
+
+Both ~(\ref{eq:1}) and ~(\ref{eq:2}) are for undistorted images.
+
+
+
+The lifetime $\mathrm{\tau}$ of a BLE device depends on its inter packet interval and in general, $\mathrm{\tau \propto \frac{1}{R}}$. Replacing $\mathrm{R}$ and incorporating approximation ratio $\mathrm{\lambda}$ into~(\ref{eq:2}):
+
+\begin{equation}
+	\mathrm{\frac{1}{\tau} \propto \bigg( \frac{\lambda bNM + \log K}{8CK} \bigg)  \frac{1}{T}}
+	\label{eq:3}
+\end{equation}
+
+The above equation relates the lifetime of an image beacon system and the approximation ratio of any image compression algorithm. Ideally, we look for an image approximation algorithm that achieves a sufficiently large $\mathrm{\lambda}$ for a reasonably high lifetime of the system.
+
+
+
+\subsection{Broadcast Capacity of Bluetooth LE}
+
+According to the BLE 4.0 specification, the maximum payload size $C$ available in beacons is 18 bytes. However, there are 33 reserved characters that cannot be read from the beacon devices. So, practically the payload size is $\lfloor \log (256-33)^{17} \rfloor \approx 132$ bits $\approx 16$ bytes.
+
+The expected lifetime of BLE beacons depends on the inter-packet interval~\cite{dementyev2013power}. For example, a BLE 4.0 beacon would last up to 3.5 years, if a packet is sent at every second (i.e. R = 1). Therefore, for a beacon system to last for 3.5 years, its broadcast bandwidth cannot exceed 16 bytes/sec.
+
+Recently, BLE 5.0 has been announced~\cite{BLE5} to offer an 8X increase in broadcast capacity and a 2X increase in transmission speed. It is scheduled to be released in early 2017. In coming days when BLE 5.0 capable devices will be widespread, we expect to have a $128$ byte sized payload and about 256 bytes/sec broadcast bandwidth.
+
+\subsection{The Case for Loss-Less Image Broadcast}
+
+The size of a typical $72\times 72$ PNG image can be anywhere between $3-13$ KB. Therefore, to transmit such an image, a BLE 4.0 beacon would require $191-832$ broadcast packets, or alternatively, we would require up to $K = 832$ beacons to simultaneously broadcast different slices of an image. The latency of a complete image transmission cycle would be up to $\mathrm{T = 13.9}$ minutes for a single beacon, or 1 second for a set of $832$ beacons.
+
+When BLE 5.0 beacons will replace 4.0, the transmission latency will drop to $52$ seconds for one beacon, or 1 second 52 of them. Therefore, without compressing the image content, even the new BLE 5.0 beacons will not be able to support a fast image beacon system with a reasonably small number of beacons.
+
+%Recall that our goal is to have an image compression routine that fit the beacon systems limited storage space.
+
+\subsection{The Case for Compressed Image Broadcast}
+
+If standard image compression algorithms could generate compressed images that meet the size and quality requirements of an image beacon system, the problem would have been already solved. But the fact is, even the best of existing image compression methods, such as JPEG/JPEG2000 and PNG, are not capable of optimizing for both quality and size at the same time. Figure~\ref{fig:common_codec_comparison} illustrates that JPEG/JPEG2000 generates extremely poor quality images given a size requirement of 300 bytes even for a very low-resolution ($64 \times 64$ pixels) image. On the other hand, to have a compressed image of acceptable quality (having a minimal useful visual information to the viewer), JPEG/JPEG2000 takes about 2K bytes.
+
+% [XXX mention encoder used]. For images compressed in both codec, without having looked at the high quality version of the image, it is hard to recognize what is in the low quality version of the image.
+%\begin{figure}[!htb]
+%    \begin{center}
+	%    \includegraphics[width=0.49\textwidth]{img/common_codec_comparison.pdf}
+	%    \vspace{-2em}
+	%    \caption{\footnotesize A 64x64 resolution image compressed in high/low quality settings using JPEG/JPEG2000: (a) JPEG high quality, 1963 bytes (b) JPEG2000 high quality, 2026 bytes (c) JPEG lowest possible quality, 738 bytes (d) JPEG2000 lowest possible quality, 391 bytes.}
+	%    \label{fig:common_codec_comparison}
+%    \end{center}
+%\end{figure}
+
+\begin{figure}[!htb]
+    \begin{center}
+    	\vspace{-1em}
+	    \includegraphics[width=0.25\textwidth]{img/common_codec_comparison2.pdf}
+	    \vspace{-1em}
+	    \caption{\footnotesize Two types of 64x64 resolution image compressed in PNG (a) from natural scene, 12112 bytes (b) JPEG2000 high quality, 1012 bytes. PNG is good for handling images with large uniform color regions. }
+	    \label{fig:png_block}
+	    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+PNG and Vector Graphics image, on the other hand, have the potential to generate a smaller compressed image that \textit{may} fit our constraints. However, these codecs generate smaller images only if the input image is of a specific type -- such as an image containing a few regions of uniform colors like a cartoon drawing, or when the shape is not complicated. This is illustrated in Figure~\ref{fig:png_block}. In general, PNG and Vector Graphics image encoding do not meet the requirements of an image beacon system that broadcasts color images taken by a smartphone user.
+
+%But we envision an image beacon system that would able to store and broadcast images taken from the real world using a user's smarptonhe camera. In general, PNG and Vector Graphics image encoding do not meet the requirements for broadcasting those types of images.
