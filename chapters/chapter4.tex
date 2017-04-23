@@ -125,17 +125,122 @@ If standard image compression algorithms could generate compressed images that m
 %    \end{center}
 %\end{figure}
 
-\begin{figure}[!htb]
-    \begin{center}
-    	\vspace{-1em}
-	    \includegraphics[width=0.25\textwidth]{img/common_codec_comparison2.pdf}
-	    \vspace{-1em}
-	    \caption{\footnotesize Two types of 64x64 resolution image compressed in PNG (a) from natural scene, 12112 bytes (b) JPEG2000 high quality, 1012 bytes. PNG is good for handling images with large uniform color regions. }
-	    \label{fig:png_block}
-	    \vspace{-1em}
-    \end{center}
-\end{figure}
+%\begin{figure}[!htb]
+%    \begin{center}
+%    	\vspace{-1em}
+	%    \includegraphics[width=0.25\textwidth]{img/common_codec_comparison2.pdf}
+	%    \vspace{-1em}
+	%    \caption{\footnotesize Two types of 64x64 resolution image compressed in PNG (a) from natural scene, 12112 bytes (b) JPEG2000 high quality, 1012 bytes. PNG is good for handling images with large uniform color regions. }
+	%    \label{fig:png_block}
+	%    \vspace{-1em}
+%    \end{center}
+%\end{figure}
 
 PNG and Vector Graphics image, on the other hand, have the potential to generate a smaller compressed image that \textit{may} fit our constraints. However, these codecs generate smaller images only if the input image is of a specific type -- such as an image containing a few regions of uniform colors like a cartoon drawing, or when the shape is not complicated. This is illustrated in Figure~\ref{fig:png_block}. In general, PNG and Vector Graphics image encoding do not meet the requirements of an image beacon system that broadcasts color images taken by a smartphone user.
 
 %But we envision an image beacon system that would able to store and broadcast images taken from the real world using a user's smarptonhe camera. In general, PNG and Vector Graphics image encoding do not meet the requirements for broadcasting those types of images.
+
+\section{Overview of \Sys}
+\label{sec:system}
+
+
+The \Sys is a mobile augmented reality system that uses a cluster of off-the-shelf, low power, storage and bandwidth constrained Bluetooth Low Energy (BLE) beacon units as an infrastructure. The system operates in two phases: 1) the capture and store phase, and 2) the read and render phase.
+
+Figure~\ref{fig:beacons} (left) shows that a person \rednote{enters} an area being monitored with \Sys. A set of cameras capture his actions and stores them inside beacons. Later (right), his activity during the first phase is viewed through a 3D augmented reality application on a mobile phone. \rednote{Due to the low energy consumption feature of BLE protocol, the broadcasting phase is extremely energy efficient. In most application scenarios of \Sys, capture phase is only performed once, or the capture is triggered by a rare event that only happens every few hours or few days. Therefore, in most of the time, \Sys is working in the broadcasting phase and the expected system lifetime can be more than 6 years.}
+
+\begin{figure}[!thb]
+	\begin{center}
+		\includegraphics[width = 0.49\textwidth]{img/fig1.png}
+		\caption{The two phases of \Sys indoor augmented reality system: capture (once) and render (many times).}
+		\label{fig:beacons}
+	\end{center}
+	\vspace{-1em}
+\end{figure}
+
+\begin{figure*}[!htb]
+	\begin{center}
+		\includegraphics[width = \textwidth]{img/photo2.png}
+		\caption{System in Action. (a): in capture phase, a person's gesture and movement is captured. (b): in render phase, the virtual object avatar is rendered in the empty environment. (c): screenshot of the viewer's screen in render phase.}
+		\label{fig:run_pi}
+	\end{center}
+\end{figure*}
+
+\begin{figure*}[!htb]
+	\begin{center}
+		\includegraphics[width = \textwidth]{img/overview.pdf}
+		\caption{A block diagram illustrating the work flow of \Sys.}
+		\label{fig:overview}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure*}
+
+\subsection{Two Phases of \Sys}
+
+During the \emph{capture and store} phase, a set of low-power cameras are used to capture the dynamics of a scene. To simplify the design of each unit, we attach a stereo camera to each BLE beacon via a low-power embedded microcontroller. However, this is not a requirement in \Sys for every BLE beacon to have its own camera, i.e. a camera can be shared by multiple beacons. We assume that the duration of dynamic events during this phase is relatively shorter, and hence, the energy consumption due to active cameras is not excessively high. Once the microcontroller computes the minimal necessary information about the scene, and the 3D objects and their motions to store, data is sent to the beacon for broadcasting over the connectionless BLE advertisement packets.
+
+During the \emph{read and render} phase, a mobile device such as a smartphone or a augmented reality headset with  a BLE capability, receives the broadcasts and renders the previously captured scene in 3D. A major task in this phase is to determine the position and orientation of the mobile device, so that the objects are rendered at the right position and orientation in the superimposed space created by the virtual and the real environment as the users walks in the space. To achieve this, the received signal strengths of the BLE beacons, in combination with the IMU and camera of the viewer's mobile \rednote{device}, is used.
+
+
+
+%The two phases of \Sys are illustrated in Figure~\ref{fig:beacons}. For example, if a person enters the monitored area, his motion is captured and stored
+
+
+%This section describes an AR indoor surveillance 3D capture and replay system. The system is a realization of our idea of AR with BLE beacons. To the best of our knowledge, we are the first to illustrate an end to end BLE beacon based system with augmented reality 3D rendering.
+
+\subsection{Internal Modules and Basic Workflow}
+
+During the set up of \Sys, a number of beacon units are placed at fixed positions in an indoor environment surrounding the area to be monitored. Assuming a camera is attached to each beacon unit, each beacon takes pictures of the empty space -- capturing only the environmental artifacts such as interesting points on the wall, furniture, and portions of the floor and the ceiling it sees. Each beacon then computes and stores a unique set of visual features (\emph{`oriented fast and rotated brief'} (ORB) features~\cite{rublee2011orb}) of the view it observes. This view serves as the baseline view for a beacon, and is later used during the view tracking of the mobile user.
+
+%each beacon has a set of visual features (in our case, ORB~\cite{ref} features) stored. Every beacon contains a unique set of visual features that are extracted from an image taken by a camera placed at the location of the beacon. Features of these images are later used to match the view of a user to track his location during the read and render phase.
+
+The workflow of our system is illustrated in Figure~\ref{fig:overview} along with the internal modules for each of the two phases of \Sys.
+
+The capture and store phase starts with the detection of any kind of change in the scene being monitored, e.g., when a subject enters into the area or an already present object or the subject moves. This awakens the cameras attached to the beacons which starts capturing and processing image. Processing the image stream involves simple predefined tasks such as detecting predefined interesting artifacts like a human body. If an object of interest is detected, key points corresponding to its moving parts (e.g., heads and hands in case of a person) are recorded over time inside the beacon storage.
+
+%a person enters the room where the system is deployed. The multiple shooting cameras attached to Raspberry Pi running pre-defined interesting artifacts such as human body detection programs then detect the person. The program running on Raspberry Pi locates the person in the video frame, detects the head and hands of the person, and stores the series key points describing the locations of head and hands over time into the beacons.
+
+During the rendering phase, each beacon broadcasts its unique set of visual features and a subset of the captured 3D point time series data. At the receiving end, the viewer's smartphone receives two types of information from all beacons: 1) broadcasted visual features, and 2) received signal strengths. The smartphone combines this information with its own view as seen from its own camera to obtain a BLE-aided image-based location and pose estimate of its own. This is further combined with the smartphone's IMU data to accurately determine the position and orientation of the smartphone. Finally, location data and 3D object data are used to render the 3D object on his smartphone in real-time.
+
+%The data is received by a viewer's smartphone in the room. The visual features, along with the beacon signal strength and the smartphone's IMU values are used in estimating the smartphone’s camera position and pose. Then based on the estimation, the 3D object that represents a moving person is rendered on the smartphone’s screen along with the camera preview.
+
+\subsection{Advantage of \Sys}
+
+There are several \textcolor{red}{advantages} of using \Sys compared to existing mobile augmented reality systems:
+
+\begin{enumerate}
+    \item \textit{Low Cost:} \Sys is built upon low-cost technologies. The current prototype, consisting of eight Estimote BLE beacons, two Raspberry Pis with Arducam cameras, cost about \$150 and is sufficient to monitor an indoor space of \rednote{6.5m $\times$ 5.3m}. The whole setup is 6--20 times less costly than existing augmented reality headsets~\cite{vuzix, hololens}.
+
+    \item \textit{Internet Free:} \Sys relies only on Bluetooth connectivity. It works in indoor environments where Internet access in unavailable or an inconvenience. Being Internet-free has some advantages; e.g., monitored environments such as retail stores and museums may already have WiFi access for customers who have bad cellular coverage, such WiFi accesses typically require additional log in steps or going through confirmation pop-ups which is an inconvenience to the user. Compared to this, our proposed system brings a seamless experience to the user.
+
+    \item \textit{Very Long Lifetime:} Thanks to the promised multi-year broadcast lifetime of the BLE standard, which enables \Sys to last for a very long time (months, if not years) over battery power. In scenarios, where the dynamics of the scene is lower (e.g., monitoring a deserted area over a very long period) or motion is captured once but viewed many times (e.g., for post-fact analysis purposes), \Sys may remain vigilant for multiple years without a battery replacement.
+
+    \item \textit{\rednote{External} Power Requirement:} Because of the phased operation, \Sys does not require \rednote{External power supply} during the read and render phase. This makes this system convenient and deployable in scenarios where supplying \rednote{external power supply} is a practical problem.
+
+    \item \textit{Extensibility:} The system can be easily extended and tuned to provide extra functionalities. First, if a stable Internet access is available in the environment, more complex 3D structures and texture information can be downloaded to the viewer's smartphone at runtime to render a more vivid virtual object. Second, besides broadcasting 3D objects and visual features, a beacon can simultaneously broadcast additional information such as URLs and messages for other applications. In the other words, the purchased BLE beacons for the system can be used in other applications at the same time; this further reduces the overall cost.
+\end{enumerate}
+
+%\textbf{(a) Low cost} The entire system only requires about 8 BLE beacons and two Raspberry Pis attached with cameras. The cost can be as low as 150 dollars.
+
+%\textbf{(b) Works in an Internet-free environment} Our system can work in any indoor environment where Internet access in not available. This brings a lot of values. This is because even though common use scenarios of our system such as retail stores and museums may have wifi access for customers to replace the low-signal cellular data usage, the wifi access typically requires a confirmation operation on a pop-up login web page, which brings inconvenience to users. Our AR system without an Internet connection would bring a seamless experience for a user.
+
+%\textbf{(c) Long lifetime} Thanks to the long lifetime brought by the BLE standard, not counting the capture phase that requires DC power supply, our system can work years long without battery replacement.
+
+%\textbf{(d) Does not require DC power supply in the broadcasting phase} In the capture phase of the system, the Raspberry Pi is turned on, which typically requires a power supply. But after that the captured 3D point data is stored in BLE beacons for broadcasting. Therefore, a DC power supply is not required. This further reduces the inconvenience and complexity in deploying the system.
+
+%\textbf{(e) Easy for conversion / extension} The system can be easily tuned to provide other functionalities. For instance, if stable Internet access is available in the environment, a more complex 3D structure plus texture information can be downloaded from the Internet to a user’s smartphone. As a result, a more vivid virtual object can be rendered. Also, while broadcasting 3D mesh data and visual feature data that are required for our system, a BLE beacon can also simultaneously broad other common information such as URLs and messages for other applications. In the other word, the purchased BLE beacons for the system can be used in other applications at the same time; this further reduces the cost in total.
+
+
+%The system contains four major functional components: capture, write, read and render. They are described in the four subsections below.
+
+%Our compression routine consists of four stages as shown in Fig.~\ref{fig:image_processing_process}: multiple view capture, depth estimation, depth-refined segmentation and image compression. They are explained in the following four subsections.
+
+
+% \begin{itemize}
+%     \item Beacon Storage Constraints --- the goal is to store a) visual features for camera location and pose estimation, and b) captured person's 3D data. Parameters: beacons, delay/battery; optimize enough informative feature for a correct matching between Pi and user camera.
+%     \item Viewer's Location and Pose Estimation --- the goal is to use 3 types of signals a) BLE signal strengths (sensitive to environment changes, fluctuates a lot, unreliable), b) IMU sensor (not good for location estimation), c) visual features (has restart problem or large data base). optimize: fast real-time, location or pose error is cm-level and 5 degrees.
+% \end{itemize}
+
+%\subsection{Capture}
+%\subsection{Write}
+%\subsection{Read}
+%\subsection{Render}
