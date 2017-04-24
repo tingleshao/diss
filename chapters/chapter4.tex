@@ -244,3 +244,218 @@ There are several \textcolor{red}{advantages} of using \Sys compared to existing
 %\subsection{Write}
 %\subsection{Read}
 %\subsection{Render}
+
+\section{Implementation Notes}
+\label{sec:impl}
+
+We developed each unit of \Sys using commercial, off-the-shelf components. Figure~\ref{fig:sys} shows one such unit.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .4\textwidth]{img/Beacon_pic1}
+		\caption{The capture unit. \rednote{Font size too big.}}
+		\label{fig:sys}
+	\end{center}
+\end{figure}
+
+Raspberry Pi is a card-sized single board low cost computer. We are using the Raspberry Pi 3 model which has Quad Core Broadcom BCM2837 64-bit ARMv8 processor with up to 1.2GHz, 1 GB RAM and 40 GPIO pins. The dimension  and weight of Raspberry Pi 3 is 86.9mm x 58.5mm x 19.1mm and 1.5oz. We are using Arducam OV5647 Mini Camera Module for Raspberry Pi. As Pi 3 is equipped with one Camera interface (CSI), we are using Arducam Multi Camera Adapter Module to interface stereo camera.
+
+
+%Device
+In all of our experiments, we use Estimote model REV.F2.3 Radio Beacon~\cite{ESTIMOTE} having a 32-bit ARM Cortex M0 CPU, 256 KB flash memory, 4 dBm output power, 40 channels (3 for advertising), and 2.4-2.4835 GHz operating frequency. The rendering application is written in Java/C++ and runs in a Nexus 5 smartphone having a 2.26GHz quad-core Qualcomm Snapdragon 800 processor, 2 GB RAM, BLE v4, and \rednote{Andriod 6}. It uses OpenGL ES and ARToolkit library in rendering the virtual object. It uses OpenCV library in camera based pose estimation and localization. We mimic BLE 5.0 broadcast packets by a set of rolling BLE 4.0 packets. The rolling mechanism is implemented by configuring the Estimote Location beacons to broadcast customized advertising packets.
+%The customized data is received from an Android compatible LightBlue Bean device~\cite{LBB} via the beacon's GPIO, configured as an UART interface.
+
+
+\section{Evaluation}
+\label{sec:eval}
+
+In this section, we describe a series of empirical evaluations. We designed experiments to cover the evaluations for both the capture and rendering phases. \rednote{We set up an experimental environment in our lab with size 6.5m $\times$ 5.3m. This is a typical use case scenario for our indoor AR system.} For the capture phase, we evaluated the performance of visual feature selection. For the rendering phase, we evaluated the performance of reference camera matching in initialization. We also evaluated the system localization and pose estimation accuracy. In the end, we performed a user study to discover the trade off between the size of 3D object of interest data and the level of preservation of the object motion information captured by the system.
+
+\subsection{Microbenchmarks}
+
+Figure~\ref{fig:run_pi} shows the execution times of different components of the \sys system. \rednote{The capture phase of the system runs on Raspberry Pi. The render phase executes on Nexus 5 Android phone}. Detecting moving objects takes 65 ms and identifying point of interest takes 103 ms. Obtaining 3D location takes only 1 ms in average. Both rendering, BLE ranging and IMU data processing takes less than 1 ms in average. The most time expensive process is camera data processing, which takes \rednote{611} ms.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/benchMark}
+		\caption{Run-time Analysis}
+		\label{fig:run_pi}
+	\end{center}
+\end{figure}
+
+
+\rednote{We also perform an energy analysis of the system. The result is shown in Figure~\ref{fig:energy1}. The energy consumption of different stages of the system is listed. The analysis is based on the setting of 1 s object of interest capture time, 1-year data broadcasting and 15-second viewing. The data consists of 15 frames of a virtual object motion. For the data broadcasting stage, the Beacon is configured with the broadcasting power -10 dBm and advertising interval 500 ms. }
+
+\rednote{We consider the fact that different components in \Sys operates in different time period. To better understand the impacts of the energy consumption in each stage on the overall system, we compute the average energy cost in each component for delivering one frame (one set of key points positions) of virtual object data to the viewer. Even though BLE Beacons (green bar) operates at a much lower power than Raspberry Pi capture unit and Android viewer device because it is expected to stay in broadcasting mode for a year, it consumes most energy comparing to other components in \Sys.}
+
+\rednote{We would also like to know the impact of changing the frequency of \Sys's capturing operation on the system's lifetime. By fixing the amount of energy the system can consume, we compute the expected lifetime of the system under a variety of capture settings. The result is given in Table~\ref{tab:lifetime_estimation}. We set the total consumable energy to be 25000 mJ. Because the viewer's device is usually powered by a separate battery, and the number of viewers in the environment is not fixed. We don't include the viewer's power consumption in this analysis. }
+
+\rednote{The result suggests that, when our system works in an active surveillance mode that captures the object of interest in the environment every minute, the system is expected to last for 30 days. When we only capture once at the beginning and then keep broadcasting without re-capturing, the system can work nearly 7 years.}
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.48\textwidth]{img/energy1.png}
+		\caption{Energy Consumption of every stage of \sys. The data for the capture phase is colored in blue. The data for broadcasting phase is colored in green. The data for viewing phase is colored in orange. The power data next to the stage labels are the working power of each stage. The number next to the bar charts are the energy consumption for rendering a frame of the virtual object.}
+		\label{fig:energy1}
+	\end{center}
+\end{figure}
+
+\begin{table}[!thb]
+\centering
+\footnotesize
+\resizebox{.45\textwidth}{!}{
+\begin{tabular}{r|c}
+\textbf{Capture Frequency}   &  \textbf{Expected Lifetime}  \\ \hline
+No capture (Only Broadcasting)  & 6 years and 348 days \\
+Once in a lifetime & 6 years and 348 days \\
+Once every day  & 6 years and 207 days     \\
+Once every hour  & 2 years and 325 days    \\
+Once every minute  & 30 days
+\end{tabular}
+}
+\caption{System lifetime under different settings.}
+\label{tab:lifetime_estimation}
+\end{table}
+
+Table~\ref{tab:cpu_mem_usage} lists the CPU and memory usage for the corresponding process in the pipeline in capture phase. For this phase the most expensive process is detecting moving object which takes 55.6\% CPU and 5.4\% memory. Identifying points of interest and obtaining 3D location takes 17.6\% and 1.3\% CPU, respectively. Table~\ref{tab:cpu_mem_usage_sp} gives an overview of the CPU and memory usage for the components of second phase. Here, IMU data processing obtains most user CPU, which is 16.33\%. Though camera data processing requires lowest user CPU (4.22\%), it uses most memory (52.11 MB) among these three.
+
+\begin{table}[!thb]
+\centering
+\footnotesize
+\resizebox{.4\textwidth}{!}{
+\begin{tabular}{r|c|c}
+
+&  \textbf{CPU (\%)} & \textbf{Memory (\%)}   \\ \hline
+Detect Moving Objects     & 55.6                    & 5.4 \\
+Identify Points of Interest  & 17.6                 & 5.4     \\
+Obtain 3D Locations  & 1.3               & 2.5
+\end{tabular}
+}
+\caption{CPU and memory usage of Raspberry Pi}
+\label{tab:cpu_mem_usage}
+\end{table}
+\vspace{-0.5cm}
+
+\begin{table}[!thb]
+\centering
+\footnotesize
+\resizebox{.48\textwidth}{!}{
+\begin{tabular}{r|c|c|c}
+
+&  \textbf{User CPU} & \textbf{Kernel CPU} & \textbf{Memory}   \\
+&  \textbf{(\%)} & \textbf{(\%)} & \textbf{(MB)}   \\
+\hline
+Rendering \& BLE Ranging     & 6.55      & 3.29              & 65.3   \\
+IMU Data Processing  & 16.33       & 0.35             & 5.27     \\
+Camera Data Processing  & 4.22     & 2.02           & 52.11     \\
+\end{tabular}
+}
+\caption{CPU and memory usage of Smartphone}
+\label{tab:cpu_mem_usage_sp}
+\end{table}
+\vspace{-0.5cm}
+
+
+\subsection{Algorithm Evaluation}
+\subsubsection{Visual Feature Selection Performance}
+
+We evaluate the our feature selection approach described in section 3.1. We compare our method with the approach of picking features randomly. We define the metric of this evaluation by dividing the number of correctly matched features with the total number of candidate features from the viewer's cameras.
+
+In the experiment, we fix the number of features from the reference camera to be 4. We use 9 images taken by the viewer's camera. For each image taken by the viewer's camera, we record the number of correctly matched feature points with the reference camera's features selected using our method and reference camera's features selected randomly. We performed the same experiment \rednote{twice with two sets of images taken in two} lab spaces with different lighting conditions. We plot the result in Fig.~\ref{fig:feature_accuracy}
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/AccuracyLab}
+		\caption{Averaged accuracy of matching between ORB features found in 10 query images and the 4 ORB features from the reference image.}
+		\label{fig:feature_accuracy}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+The result shows that our method can significantly improve the feature matching performance, given the smallest possible number of features to be stored, our method gives 95\% matching accuracy in lab 1 (darker room) and 100\% accuracy in lab 2 (brighter room). As a comparison, randomly picking features gives 77.5\% and 65\% chance of generating a correct result in two rooms, respectively.
+
+\subsubsection{Beacon-Guided Camera Matching Performance}
+We evaluate the performance of Beacon-Guided Camera Matching in the initialization stage. In setting up the experiment, we placed 64 measurement spots on the floor of the environment, as illustrated in Fig.~\ref{fig:lab} (a) After that, the 8 beacon's Bluetooth signals' strength are measured and the BLE beacon based location estimation is performed. Then the reference cameras that are far away from the viewer is filtered out. The number of reference cameras being considered at each measurement spots is shown in Fig.~\ref{fig:lab} (b). We can observe that in all measurement points, at least one reference camera is excluded. In half of the cases, more than 3 reference cameras are excluded. This means reduction of computation time by almost 40\% and increase of potential matching success rate.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .45\textwidth]{img/lab.png}
+		\caption{(a): the configuration of measurement points in the lab. (b): heat map showing the number of cameras being considered in visual feature matching. The right button corner is for without using Beacon-Guided Camera Matching (using all 8 cameras).}
+		\label{fig:lab}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+\subsubsection{Localization Accuracy}
+
+We conduct an experiment to measure the localization and pose estimation accuracy of MARBLE system in the render phase. We designed a viewer trajectory that has a length about half of the room size. We set 16 measurement points along the trajectory. \rednote{We fix the viewer camera's angle and location at every measurement point. We record the angle and location of every measurement point as the ground truth. In the experiment, we move the viewer device along the trajectory, at each measurement point. We carefully move the viewer's device so device's location and viewing angle match the designed value at that point. At every measurement point, we record the camera state estimation (IMU-only, BLE-only, camera-only and the Kalman filter joint estimation). We designed the experiment to have two measurement points with viewer's device not pointing to the direction of the virtual object. At these two points, the system turns off the camera based estimation. So the estimation error from these two points for the camera-only method is not available (marked as crossed in Figure~\ref{fig:location_heatmap} and Figure~\ref{fig:angle_heatmap}). In the analysis, we compute the localization error based on square root of the sum of squared differences in $x$, $y$ and $z$ between estimate and ground truth.}
+
+We plot the localization result error in Figure~\ref{fig:location_heatmap}. The result suggests that the camera based localization has a higher accuracy than BLE based localization in most cases. The sensor fusion using both BLE signal and camera signal provides an even more accurate result, except for the first measurement point, where the camera based method has the highest accuracy.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.48\textwidth]{img/location_colorbar2.png}
+		\caption{Heat Map of the errors in cm on location estimation in 16 different measurement points. From left to right: BLE Beacon based estimation, Camera based estimation and Sensor Fusion using two signals.}
+		\label{fig:location_heatmap}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+\subsubsection{Pose Estimation Accuracy}
+We also plot the accuracy of pose estimation for the experiment described in the previous subsection. We derive the error by computing square root of the sum of squared difference on all rotation angles between the ground truth and the estimated values.
+
+The result suggests that the IMU based pose estimation has a slightly higher accuracy than camera based estimation. The error stays less than 20 degrees.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/angle_colorbar.png}
+		\caption{Heat Map of the errors in angle on pose estimation in 16 different measurement points. From left to right: IMU based estimation, Camera based estimation and Sensor Fusion using two signals.}
+		\label{fig:angle_heatmap}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+\subsubsection{Real Deployment and User Study}
+
+We perform a real user study to explore the performance of the entire system. We design the experiment with 10 participants entering the room one by one. We captured videos of a human doing five gestures at two different speed in the room. The five gestures are: left hand wave, right hand wave, clap, hand roll, and both hand wave. The gesture was completed within 1.5 seconds and 0.75 seconds for low speed and high speed respectively. We then detect the head and hands location in 3D to generate the key points over time. We sampled the points at 3Hz, 6Hz, 9Hz, 12Hz and 15Hz to generate data with different size.
+
+In the render phase we use these data to create our moving virtual object (avatar). Once a user enters the room we show him/her the avatar performing one of the five gestures on the phone running the render app. The user then guess which gesture is being performed. We vary the avatar data being used with different sampling frequency and speed. In total we gather 50 answers. Based on the correctness of the answers we derive the quality of the avatar at every sampling frequency and speed combination.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/User2}
+		\caption{Human Gesture Sampling Frequency Impact at (a) Low Speed (b) High Speed.}
+		\label{fig:user}
+	\end{center}
+\end{figure}
+
+In Figure~\ref{fig:user}(a), we can see that for low speed gesture, 6Hz sampling frequency is enough (100\% accuracy) for users to recognize the easy gestures like right hand wave and left hand wave. Although for more difficult gestures like both hand wave, it gives about 75\% accuracy. In Figure~\ref{fig:user}(b), we can see that higher gesture speed has a higher recognition accuracy (more than 90\%) for difficult gestures at 9Hz, it gives lower accuracy (70\%) of easy gestures at 6Hz. Overall, we argue that 9Hz sampling frequency is good enough to capture the meaning of a motion around 1s. This requires 162 bytes data, which can be broadcasted by one BLE 5 packet.
+% \\
+% \rnote{From this experiment, we can conclude that having 9Hz sampling rate gives us at least 90\% accuracy.}
+
+\section{Conclusion}
+\label{sec:conclusion}
+In this paper, we described MARBLE, an Internet-free augmented reality system that uses beacon devices. The system captures the object of interest in the environment, find the 3D key points that best describes the object of interest given the limited storage, and transmit it to viewer for rendering. The viewer uses multiple sensor information, including he beacon BLE signal strength, to determine its location and pose in the environment. \rednote{In the broadcasting phase}, the MARBLE system works without \rednote{external} power support and battery replacement for years.
+
+The main contribution of our work is the overall system design and construction, the method of selecting the best visual features for camera-based localization and pose estimation and quantifying the trade-off between object key point data size and the quality of the object approximation. Our work widens the usage of the energy efficient, long-lasting beacon devices by enabling the application of this type of devices for indoor AR application. \rednote{Our system can be easily extended for building other types of AR applications including real world object tagging.}
+
+% XXX
+% Our system will perform at its best with the beacons that adopts the upcoming Bluetooth 5.0 standard. A future work is to evaluate the different aspects of the system performance as the Bluetooth 5.0 is released and gets popular. Moreover, a `fat-beacon' standard is under development at Google, that allows an even higher broadcast transmission capacity for BLE beacons. The goal of that standard is to equip beacon devices with the ability to broadcast basic web contents to smartphones in absence of the Internet connectivity. It will be meaningful to study the application of our image beacon system combined with a fat beacon.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The system is a realization of using BLE beacons for indoor augmented reality. Start from MARBLE, several possible extensions can be developed and research can be conducted.
+
+In the capture phase, if the object of interest is a human body, with a face recognition and face tracking technique, the accurate orientation of where the person is facing to can be estimated. And the face details can be captured. Therefore the additional face information can be stored and broadcasted in the system. \rednote{This will enable a visualization of the face as a part of the avatar}. Besides that, the entire shape information may be captured and represented as a 3D mesh, to replace the key points information. A mesh compression method such as~\cite{DRACOBLOG} or~\cite{valette2004wavelet} that reduces the 3D mesh data size can be applied.
+
+To enhance the user experience with an avatar that contains more details of the object of interest, another approach is to store both the texture information and shape information. The challenge for this is that the texture information usually requires thousands of bytes storage space, which exceeds the system's storage capacity. One custom image compression techniques that designed for such extreme low storage case is described in~\cite{shaoyears}, that algorithm could be extended to better support textures.
+
+\rednote{Depending on the viewer's device, more types of input signals including GPS or infrared camera can be added into the sensor fusion model. \Sys should make use of the three input signals described in this paper as the basis for the localization and pose estimation task, and it should be able to accommodate new types of sensor inputs when they are available.}
+% Another possible direction of extending the system is to explore the ability in supporting multiple objects of interest that has interactions. For example, capturing two people's movement and their geometric relationship in the environment could be studied.
+% The current MARBLE system has a regular capture unit configuration. In some environments that is less regular, such as a non-rectangular shape room, the optimal way of deploying the capture unit to achieve the best capture performance could be a research topic.
+\section{Related Work}
+\label{sec:related}
+Many research projects have been done in exploring the indoor localization using Bluetooth signals. In \cite{cheung2006inexpensive}, Cheung et al. describes an indoor positioning system with Bluetooth beacons for a low cost (\$20). The approach is to place a beacon with a unique signature inside every room. So the smartphone can identify the signature to tell which room it is in. Their system achieves room-level precision. \cite{kajioka2014experiment} talks about an experiment of evaluating the accuracy of indoor positioning using BLE. This work uses 22 BLE beacons inside and outside of a 10.5m x 15.6m classroom. The localization granularity is less than 1m. They divide the space in the room and outside of the room into 56 regions. And generate 5800 training examples for later position identifying. In determining the user's location in experiment, the current RSSI signal is matched against pre-generated data using template matching based on Sum of Squared Difference (SSD). The accuracy is as high as 95\%. \cite{inoue2009indoor} describes a system similar to \cite{kajioka2014experiment}, but the system estimates a state transition using movement model. It is then followed by a probability distribution calculation to better determine the location. \cite{faragher2014analysis,faragher2015location} are analysis of the accuracy of BLE indoor positioning. It discusses about the fast fading effects in BLE indoor positioning and its impact on the positioning accuracy, it also mentions that the existence of the WiFi signal in the space also impacts the positioning accuracy. The solution they proposed is to migrate a batch of RSSI readings (multipath mitigation) by taking the median of a batch of values. They showed that this improves the RSSI fingerprinting performance. They also further proposed the optimal BLE deployment density and argue that more dense beacon deployment does not improve the system performance after a certain threshold is reached.
+
+Multiple work have been done in using one or multiple sensor inputs in mobile devices for augmented reality applications, including~\cite{ababsa2009advanced, al2013indoor, deniz2014vision, guan2016vision, dissanayake2001solution, aulinas2008slam}. There is a category of technologies named SLAM that explores the environment and locates the viewer simultaneously~\cite{dissanayake2001solution, aulinas2008slam}, which can be considered as an alternative solution to our localization and pose estimation problem. \cite{deniz2014vision, guan2016vision} only uses visual information in determine the viewer's pose and location. Instead of using ORB features, \cite{guan2016vision} used SURF feature for image matching. In~\cite{ababsa2009advanced} the author combined multiple sensor inputs using Kalman filter, but their work is to build an outdoor localization system, where GPS signal is used as one sensor input.

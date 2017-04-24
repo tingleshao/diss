@@ -41,3 +41,691 @@ The main contributions of this paper are as follows:
   \item We have developed and evaluated a prototype of an image beacon system that broadcasts color images of various types (e.g., near-distance indoor and outdoor objects, road signs, and buildings). Our evaluation shows that one BLE 5.0 beacon would be capable of broadcasting good-quality images (70\% structurally similar to original images) for a year-long continuous broadcasting, and both the lifetime and the image quality improve when more beacons are used.
 	%}
 \end{enumerate}
+
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Generic Problem Setting}
+
+The problem is formally stated as: given an image $\mathrm{x}$ (where each pixel is represented by $\mathrm{b}$ bit) having the dimensions of $\mathrm{N \times M}$, the number of available beacon devices $\mathrm{K}$, the payload size of each beacon packet $\mathrm{C}$ bytes, the maximum allowable broadcast rate of $\mathrm{R}$ packets/sec, and the maximum allowable latency for an image $\mathrm{T}$, the objective is to find an approximate representation of the image $\mathrm{\hat{x}}$ so that the lifetime $\mathrm{\tau}$ of the beacon system is maximized while the approximation ratio $\mathrm{\lambda(x, \hat{x}) \in [0,1]}$ of the image is high ($\mathrm{\lambda = 1}$ means no distortion). Now, for a single beacon, the broadcast rate:
+\begin{equation}
+	\mathrm{R = \bigg( \frac{bNM}{8C} \bigg) \frac{1}{T}}
+	\label{eq:1}
+\end{equation}
+
+For K beacons, considering $\log K$ overhead bits for addressing the beacons, and $K$ times more payload capacity:
+\begin{equation}
+	\mathrm{R = \bigg( \frac{bNM + \log K}{8CK} \bigg)  \frac{1}{T}}
+	\label{eq:2}
+\end{equation}
+
+Both ~(\ref{eq:1}) and ~(\ref{eq:2}) are for undistorted images.
+
+
+
+The lifetime $\mathrm{\tau}$ of a BLE device depends on its inter packet interval and in general, $\mathrm{\tau \propto \frac{1}{R}}$. Replacing $\mathrm{R}$ and incorporating approximation ratio $\mathrm{\lambda}$ into~(\ref{eq:2}):
+
+\begin{equation}
+	\mathrm{\frac{1}{\tau} \propto \bigg( \frac{\lambda bNM + \log K}{8CK} \bigg)  \frac{1}{T}}
+	\label{eq:3}
+\end{equation}
+
+The above equation relates the lifetime of an image beacon system and the approximation ratio of any image compression algorithm. Ideally, we look for an image approximation algorithm that achieves a sufficiently large $\mathrm{\lambda}$ for a reasonably high lifetime of the system.
+
+
+
+\subsection{Broadcast Capacity of Bluetooth LE}
+
+According to the BLE 4.0 specification, the maximum payload size $C$ available in beacons is 30 bytes. The expected lifetime of BLE beacons depends on the inter-packet interval~\cite{dementyev2013power}. For example, a BLE 4.0 beacon would last up to 3.5 years, if a packet is sent at every second (i.e. R = 1). Therefore, for a beacon system to last for 3.5 years, its broadcast bandwidth cannot exceed 30 bytes/sec.
+
+Recently, BLE 5.0 has been announced~\cite{BLE5} to offer an 8X increase in broadcast capacity and a 2X increase in transmission speed. It is scheduled to be released in early 2017. In coming days when BLE 5.0 capable devices will be widespread, we expect to have a $128$ byte sized payload and about 256 bytes/sec broadcast bandwidth.
+
+\subsection{The Case for Loss-Less Image Broadcast}
+
+The size of a typical $72\times 72$ PNG image can be anywhere between $3-13$ KB. Therefore, to transmit such an image, a BLE 4.0 beacon would require $191-832$ broadcast packets, or alternatively, we would require up to $K = 832$ beacons to simultaneously broadcast different slices of an image. The latency of a complete image transmission cycle would be up to $\mathrm{T = 13.9}$ minutes for a single beacon, or 1 second for a set of $832$ beacons.
+
+When BLE 5.0 beacons will replace 4.0, the transmission latency will drop to $52$ seconds for one beacon, or 1 second 52 of them. Therefore, without compressing the image content, even the new BLE 5.0 beacons will not be able to support a fast image beacon system with a reasonably small number of beacons.
+
+%Recall that our goal is to have an image compression routine that fit the beacon systems limited storage space.
+
+\subsection{The Case for Compressed Image Broadcast}
+
+If standard image compression algorithms could generate compressed images that meet the size and quality requirements of an image beacon system, the problem would have been already solved. But the fact is, even the best of existing image compression methods, such as JPEG/JPEG2000 and PNG, are not capable of optimizing for both quality and size at the same time. Figure~\ref{fig:common_codec_comparison} illustrates that JPEG/JPEG2000 generates extremely poor quality images given a size requirement of 300 bytes even for a very low-resolution ($64 \times 64$ pixels) image. On the other hand, to have a compressed image of acceptable quality (having a minimal useful visual information to the viewer), JPEG/JPEG2000 takes about 2K bytes.
+
+% [XXX mention encoder used]. For images compressed in both codec, without having looked at the high quality version of the image, it is hard to recognize what is in the low quality version of the image.
+\begin{figure}[!htb]
+    \begin{center}
+	    \includegraphics[width=0.49\textwidth]{img/common_codec_comparison.pdf}
+	    \vspace{-2em}
+	    \caption{\footnotesize A 64x64 resolution image compressed in high/low quality settings using JPEG/JPEG2000: (a) JPEG high quality, 1963 bytes (b) JPEG2000 high quality, 2026 bytes (c) JPEG lowest possible quality, 738 bytes (d) JPEG2000 lowest possible quality, 391 bytes.}
+	    \label{fig:common_codec_comparison}
+    \end{center}
+\end{figure}
+
+\begin{figure}[!htb]
+    \begin{center}
+    	\vspace{-1em}
+	    \includegraphics[width=0.25\textwidth]{img/common_codec_comparison2.pdf}
+	    \vspace{-1em}
+	    \caption{\footnotesize Two types of 64x64 resolution image compressed in PNG (a) from natural scene, 12112 bytes (b) JPEG2000 high quality, 1012 bytes. PNG is good for handling images with large uniform color regions. }
+	    \label{fig:png_block}
+	    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+PNG and Vector Graphics image, on the other hand, have the potential to generate a smaller compressed image that \textit{may} fit our constraints. However, these codecs generate smaller images only if the input image is of a specific type -- such as an image containing a few regions of uniform colors like a cartoon drawing, or when the shape is not complicated. This is illustrated in Figure~\ref{fig:png_block}. In general, PNG and Vector Graphics image encoding do not meet the requirements of an image beacon system that broadcasts color images taken by a smartphone user.
+
+%But we envision an image beacon system that would able to store and broadcast images taken from the real world using a user's smarptonhe camera. In general, PNG and Vector Graphics image encoding do not meet the requirements for broadcasting those types of images.
+
+
+
+\begin{figure*}[!thb]
+	\includegraphics[width=\textwidth]{img/block.pdf}
+	\caption{\footnotesize Multiple views of a scene are used to estimate the depth map. Combined with standard image segmentation, this can identify the pixels of an image that may be of more interest than the rest, e.g. a foreground object.}
+	\label{fig:blocks3}
+	\vspace{-1em}
+\end{figure*}
+
+
+\section{Image Beacon System Overview}
+\label{sec:system}
+
+In a typical usage scenario of the proposed image beacon system, a user at first takes pictures of an object with his smartphone's camera. A smartphone application analyzes the image (which may contain objects, portraits, scenes, shapes, signs, and/or text), identifies semantic regions on it, and processes each region differently to produce a compressed version that satisfies the beacon system's requirements such as the number of available beacon devices, maximum allowable loading time, and lifetime. The user is also shown an interactive preview of the image so that he can verify it, as well as relax/constrain the system requirements. Finally, when he is satisfied with the preview, the image is written into the image beacon system. The beacon system would then broadcast the image periodically over BLE, and any other smartphone user would be able to receive that broadcast and see the image on their phones.
+
+%Our compression routine consists of four stages as shown in Fig.~\ref{fig:image_processing_process}: multiple view capture, depth estimation, depth-refined segmentation and image compression. They are explained in the following four subsections.
+
+\subsection{System Design Choices}
+
+The design choices we made in developing an image processing algorithm for the proposed image beacon system are as follows:
+
+\begin{enumerate}% [leftmargin=1em]
+
+	\vspace{.5em}
+	\item First, our custom image compression technique is designed to work for images taken with a smartphone. We assume that the phone has an on-board IMU in it. The final compressed image will be a color image with a lower resolution, such as $64 \times 64$ pixels.
+
+	\vspace{.5em}
+	\item Second, we make a reasonable assumption that the image to be compressed is linked to a real-word ``thing" like a near-distance object, a road sign, or a building -- which has one or more regions of interest that a person who took the picture wants to preserve with a higher priority than the rest. By exploiting this, we design an image encoding technique that prioritizes foreground information preservation during image compression, so that the most important information in the image is delivered under a given size constraint.
+
+
+%we introduce the concept of ``adaptive encoding". Having this constraint of limited image type, limited storage space and a notion of foreground and background separation, what the custom compression does is that it will generate an image with significant distortion, since the image background information tends to be reduced a lot. We know that for all image encoding techniques with the highest quality setting, the compressed image all look the very similar (and should all look like the original image), but as the quality setting decreases, different encoding will give a low quality image distorted in different ways: either a lack of boundary details, an increase of noise, a changed color or a removed texture. 	Therefore, the best encoding with limited storage for a given image depends upon either the user wants to preserve the texture information, or to keep the true color,  etc.
+	%And this varies among cases: a best image encoding for foreground region may not be the best for the background region; the best encoding for an image captured to describe a shirt may not be the best encoding to describe a road sign.
+
+	\vspace{.5em}
+	\item Third, under a very tight budget for the final image size, any image compression algorithm would distort the original image -- which is reflected in different ways such as lacking boundary details, increased noise, changed colors, or removal of texture. We introduce the concept of \textit{adaptive encoding} that applies different encodings to different regions of an image based on the image content (e.g., a road sign vs. a t-shirt), image regions (foreground vs. background), and what a user would prefer to preserve (e.g., texture or true color). The proposed compression algorithm should employ an adaptive approach that applies the most suitable encoding technique for different image types and region types, so that an optimal compression strategy is chosen for a given image based on its content.
+
+	\vspace{.5em}
+ \item Fourth, since both capturing an image and writing the compressed version into the beacon devices involve the smartphone user in the loop, we provide an interactive user interface in order to guide the user in taking pictures, and to preview and select the desired image under a given set of system constraints.
+\end{enumerate}
+
+%\rednote{to help/correct the automated image segmentation if needed,}
+
+\subsection{Image Processing Pipeline Overview}
+
+For a given set of user-defined beacon system requirements, the overall image processing and compression pipeline (Figure~\ref{fig:image_processing_process}) consists of four basic stages: multiple view capture, depth estimation, depth-refined segmentation, and image compression. These steps are briefly described in this section, and elaborated in detail in the subsequent sections.
+
+\begin{figure}[!thb]
+    \begin{center}
+	    \includegraphics[width=0.49\textwidth]{img/image_processing_process.pdf}
+	    \caption{\footnotesize Image processing stages.}
+	    \label{fig:image_processing_process}
+	    \vspace{-2em}
+    \end{center}
+\end{figure}
+
+\begin{enumerate} %[leftmargin=1em]
+	\vspace{.5em}
+	\item \textit{Multiple View Capture:} The proposed system requires a user to capture two or more views of an object -- which helps at a later stage when the depth map is generated. Estimating pixel depths using a pair of images takes about 2 seconds on a mobile device. Because processing too many images would be time consuming, a careful selection of views (e.g. images having adequate overlaps) makes a difference. Figure~\ref{fig:blocks3}(a) shows two views of a mug that have enough overlap to create a depth map. To guide the user and to select the best pair of images for depth estimation, we leverage IMUs of the smartphone. The algorithm is described in Section~\ref{sec:mvcap}.
+	\vspace{.5em}
+	\item \textit{Depth Estimation:} Depth of each pixel is estimated by finding and matching corresponding `feature points' (e.g., corners and edges) in two or more images. The matched points are then used to generate the camera relative geometry, so that the depth of every pixel can be estimated. Figure~\ref{fig:blocks3}(b) shows two depth maps of the same image. The left one is the computed depth map, and the right one is thresholded to separate the background from the foreground pixels. However, due to lack of enough views, low resolution, and inaccuracies in estimation, depth map alone is not sufficient to segment semantic regions in an image. Depth estimation from multiple views is discussed as part of Section~\ref{sec:algo_dep}.
+	\vspace{.5em}
+	\item \textit{Depth-Refined Segmentation:} Like depth map, color/texture-based image segmentation algorithms often fail to identify semantically different/similar regions in an image. For example, the left image in Figure~\ref{fig:blocks3}(c) is the result of applying marker-controlled watershed segmentation~\cite{parvati2009image} on the original image. When we overlay this with the depth map, we obtain a better segmentation, which performs a much better job in isolating the mug from the rest. This step is inspired by one of our earlier work~\cite{nirjon2012kinsight} that used RGB and depth images from Kinect sensors. In this work, we use only images to estimate the depth (previous step) and then apply this step to get the final segmentation. The details of this step are in Section~\ref{sec:algo_drs}.
+	\vspace{.5em}
+	\item \textit{Image Compression:} The image compression stage takes both an image (for texture and content information) and its segmentation map (for semantic region information), and produces the best quality image under the user-specific constraints of the beacon system. Until the resultant image size satisfies the system requirements, the algorithm gracefully degrades the quality of different semantic regions, starting from the least important one (e.g., the background). This step is described in detail in Section~\ref{sec:algo_icomp}.
+\end{enumerate}
+
+
+%\section{Algorithm Details}
+%\label{sec:algo}
+
+%\begin{figure*}[!thb]
+%    \begin{center}
+%	    \includegraphics[width=\textwidth]{img/system_diagram_real.pdf}
+%	    \caption{\footnotesize Overview of the beacon system.}
+%	    \label{fig:block}
+%	%    \vspace{-1em}
+%    \end{center}
+%\end{figure*}
+
+%The proposed four-stage image processing pipeline for converting an input image to its approximate equivalent is described in this section.
+
+%Based on our image beacon system's requirements, we designed and implemented a custom image processing algorithm to make any input image in a sufficient small size for our system.
+
+\section{Multiple View Capture}
+\label{sec:mvcap}
+
+
+
+\subsection{Need for Multiple Views}
+
+%Images from  In our system, the image to be stored into beacon system is always taken from a smartphone's camera. Recall that our image compression is based on a foreground / background separation. Before the image encoding, a binary segmentation map needs to be produced.
+
+The first step of our proposed image processing pipeline is to guide the user in capturing two or more views of an object of interest. Further down the pipeline, these images are used to estimate the depth information of each pixel, so that an image can be segmented into background and foreground regions, prior to applying appropriate region-specific encodings.
+
+An alternative to using multiple views is to apply standard image segmentation algorithms~\cite{parvati2009image, otsu1975threshold, long2015fully, zheng2015conditional} on a single image. These algorithms group adjacent pixels of an image based on information derived from pixel intensity in various ways. However, in order to obtain a sufficiently accurate segmentation for the proposed system, we require computationally expensive algorithms, such as convolutional/recurrent neural networks~\cite{zheng2015conditional}, which are not suitable for running on smartphones and does not produce results in real-time.
+
+
+%state-of-art method such as CNN-RNN \rednote{[?]} is computational expensive and it is not easy to be adopted on a phone and to run on real-time.
+%A rich set of image segmentation method has been invented \rednote{[?]}.
+
+\subsection{Challenges with Multiple Views}
+
+Even though smartphones cannot run state-of-art image segmentation algorithms in real-time, many other computer vision techniques, including depth estimation from two views, can be implemented on them. In order to get a sense of their real-time performance, we used OpenCV library for Android to compute the depth map for a pair of $400 \times 400$ pixel images. It took about two seconds for the algorithm to finish on a Nexus 5 phone. This gives us the lower limit for depth map computation, which may only happen if the user is well-trained and knowledgeable to know which views or camera poses would produce the most effective depth map.
+
+%Since our goal is to let the user take multiple images
+%and finishes in a short time that close to real time given a pair of images without too large resolution. For a pair of $400 \times 400$ pixel resolution images, the computation time on a Nexus 5 is about 2 seconds. Since in our system, the user always uses the cellphone to take the input picture, we can ask the user to take more than one photos. Then the system can make use of the depth information generated by such algorithm.
+%On the other hand, the computational power grows a lot on smart phones in the past few years,
+%To generate the input image with segmentation, the user should take two or more images taken on the same scene with a slightly changed view angle.
+
+A good pair of images is critical in generating a good depth map. However, the finding of a good pair of images depends on many factors. The most important of which is a suitable difference in view angles. It also depends on the distance between the object/scene and the smartphone. Furthermore, there are other factors such as lighting, texture and shapes of the image.
+
+If a real-time depth estimation system could display the current depth map as the user takes images, it would be easier for him to generate a good pair of images for depth estimation. However, depth estimation does not run in true real-time on most smartphones. In absence of a real-time feedback, a user has to take the trial-and-error approach, i.e., he has to take two images, look at the result after two seconds, and then repeat the entire process until the result looks good. This may lead to a very long time in just taking the right photos, and result in a non-smooth user experience.
+
+\subsection{IMU Assisted View Capture}
+
+To address this problem, we designed a method to make use of the inertial measurement unit (IMU) of the phone to shorten the image capture time and to improve the user experience. We adopt a machine-learning based approach.
+
+In the offline training phase, we use a smartphone to capture video/image of multiple indoor and outdoor objects. We also keep record of the IMU values for each captured image. The IMU data consists of $\mathrm{\delta x_r}$, $\mathrm{\delta y_r}$ and $\mathrm{\delta z_r}$, which represent the components of the difference vector between the rotation vectors between a pair of images. The IMU data also contains $\mathrm{x_a}$, $\mathrm{y_a}$ and $\mathrm{z_a}$ components of acceleration when taking an image. After this, we run depth estimation for all pairs of images and estimate its accuracy by comparing the result against a manually generated ground-truth segmentation.
+
+The segmentation accuracy is measured in terms of \textit{intersection over union} (IoU), where \textit{intersection} is defined as the area of intersections between foreground regions of two segmentations, and \textit{union} is defined as the set of pixels either marked as foreground in the testing segmentation or in the ground truth segmentation. For a segmentation that is identical to the ground truth, IoU equals to 1.
+
+Using IoU values as the variable $\mathrm{Y}$, and the IMU data for the corresponding pair of images as the variable $\mathrm{X}$, where \(\mathrm{X} = [\delta x_r, \delta y_r, \allowbreak \delta z_r,\allowbreak x_a,\allowbreak y_a, z_a]\), we create a data set for many pairs of images, and then train a regression tree model to learn the relationship between the change in IMU values between a pair of images and an expected quality of depth segmentation.
+
+During the online phase, when the user is taking images for depth estimation, the trained regression tree model keeps track of current IMU readings and gives hints about if current view is a good choice, given the already taken photo(s).
+
+\section{Depth Estimation and Segmentation}
+\label{sec:dest}
+
+The second and third stages of the proposed image processing pipeline are described together in this section.
+
+\subsection{Depth Estimation}
+\label{sec:algo_dep}
+
+In this step, the depth of each pixel is estimated from a pair of images. We use a standard algorithm~\cite{hirschmuller2005accurate} that at first estimates the `disparity' between the corresponding points on two images, and then estimated depth from disparity. For example, if a point $\mathrm{P_1}$ on the first image and a point $\mathrm{P_2}$ on the second image correspond to the same point $\mathrm{P}$ on the actual physical world object, then $\mathrm{(P_1 - P_2)}$ is called the disparity between them. Depth of a pixel is, in general, inversely proportional to its disparity. This is based on the principle that points in the scene that are closer to the camera will have larger disparity, and points that are very far away will be effectively at the same or very close location on both images. Hence, finding the depth map is essentially equivalent to finding the disparity map.
+
+The disparity map is generated by the \textit{stereo matching} algorithm described in~\cite{hirschmuller2005accurate}. The goal of the algorithm is to find matching pixel blocks in a pair of images. This is also called the \textit{correspondence problem} as it looks for the pixel coordinates on the image pair that corresponds to the same world point. The disparity map is computed based on the matching result. The disparity map is a gray-scale map, where the intensity directly corresponds to depth.
+
+
+%The method searches for matched pixel blocks on a given pair of images.
+%Pixel-wise matching is performed based on mutual information.
+%It then enforces the smoothness of the matching on neighboring disparities. This avoids matching of pixel blocks that belongs to different locations with low matching cost. For each pixel block, the neighboring cost is aggregated from 16 directions.
+
+%
+%Having a pair of images that has the right difference in view angles, disparity estimation is done on the images.
+%The result disparity map tells the relative depth information about the pixels in the scene.
+%The disparity estimation is based on the principle that the objects that closer to the camera will have larger differences in two images. Then the problem is to find the matching in the two given images.
+
+
+
+\subsection{Depth-Refined Segmentation}
+\label{sec:algo_drs}
+
+%We designed a procedure to further refine the segmentation map based on depth estimation to generate a clean foreground region.
+
+The depth estimation algorithm groups pixels purely based on depth. It may not group pixel regions even if the regions share a common appearance pattern. As a result, even an accurate depth map tends to contain holes in foreground regions and isolated, incorrectly marked, small, bright regions in the background. Therefore, it is necessary to introduce other types of information derived from the image to obtain a cleaner and better segmentation. The refinement process is described as follows:
+
+%\begin{itemize}[leftmargin=10pt]
+	%\vspace{-0.25em}
+	\vspace{.5em}
+	%\item
+	\textit{Thresholding:} At first, a binary segmentation of the depth map is obtained by applying a threshold on depth values.
+
+	%The segmentation from depth estimation takes a pair of images. Here the image to be compressed is always the left image. Firstly, we put a threshold on the depth map to generate a binary segmentation map purely based on depth for the left image.
+	\vspace{.5em}
+	%\item
+	\textit{Combining with Watershed Segmentation:} We combine the depth-based segmentation map with another image segmentation method which groups pixels into several connected large regions and is computationally inexpensive to run on a mobile device. Watershed segmentation algorithm fits these requirements. However, the traditional watershed segmentation tends to generate an over-segmented result. Hence, we adopt the marker-controlled watershed segmentation, which uses mathematical morphology operations to pre-process an input image to avoid over-segmentation~\cite{hirschmuller2005accurate}.
+
+	At first, the input image is converted into grayscale. Then we run the marker-controlled watershed segmentation on the grayscale image. A successful segmentation contains more than one segmented regions to separate foreground from background in the image. To determine which region belongs to the foreground, we apply a voting approach: the region that includes the highest number of common pixels with the foreground region in the depth-based segmentation map is labeled as foreground. Here we denote the number of common pixels as $N$, where $N$ is defined as:
+	\begin{equation}
+		\mathrm{N = \max_i\mbox{ }C(W_i, D)}
+	\end{equation}
+
+	Here, $\mathrm{i}$ is the index of a region, and $\mathrm{W_i}$ is the corresponding region. $\mathrm{D}$ represents the foreground region in the depth-based segmentation. $\mathrm{C(,)}$ computes the number of common pixels between two regions. If there is another region $\mathrm{W_j}$ for which, $\mathrm{C(W_j,D)} \ge 0.8 \times N$, then it is also considered as foreground. This procedure iterates until no more regions can be added to the foreground. Having two result segmentation maps, we produce a final map by labeling pixels that are considered foreground in both maps as foreground.
+
+	%As an alternative approach, we could also allow the user to select the foreground regions by integrating the selection feature into the smart phone client.
+
+	\vspace{.5em}
+	%\item
+	\textit{Final Refinement:} Finally, we perform a pixel-level refinement process. We remove all connected foreground pixel regions with size less than $1000$ pixels because regions of this size tend to be a background region. Then we apply two common mathematical morphology operations erosion and dilation, to clean out any remaining bright pixel islands in the background and to expand the foreground regions, respectively. Lastly, we enforce the accuracy of the segmentation boundary by combining the result with the labeled watershed foreground region.
+
+	%by a disk operator with size 5 pixels and a dilation operation by a disk operation with size 10 pixels. Erosion operation cleans out the remaining bright pixel islands in the background. And the dilation operation expands the foreground regions.
+
+
+
+%\end{itemize}
+
+%\subsubsection{Thresholding}
+
+%\subsubsection{Combine with Watershed Segmentation}
+
+%\subsubsection{Final Refinement}
+
+
+
+
+
+\section{Image Compression}
+\label{sec:algo_icomp}
+
+The last stage of the proposed image processing pipeline is the image compression step. Using the segmentation information from the previous stage, this step encodes different segments of an image using different encoding techniques. The overall goal is to make sure that the resultant image fits the storage requirement of a beacon system, while making sure that the foreground regions are the least affected by during the compression process.
+
+
+
+
+\begin{figure}[!thb]
+    \begin{center}
+	    \includegraphics[width=0.45\textwidth]{img/encoding_details.pdf}
+	    \caption{\footnotesize Image compression details.}
+	    \label{fig:block}
+	%    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+
+%So far we have discussed how to generate an accurate and fast image segmentation on smartphones
+
+%Subsection A-C describes how to generate an accurate foreground/background map from the images user took using cellphone. The goal is to make use of this segmentation as the region of interest information to generate an image that allocate more bit resource to better preserve the foreground information under the limited image size constraint.
+
+%As mentioned in the beginning of this section, a best image encoding mechanism for a given image depends on the system storage space constraint, the image type and the user's preference. And an adaptive encoding scheme that integrates multiple encodings is useful.
+
+We propose three encoding options for image compression -- \textit{discrete cosine transform} (DCT) and coefficient reduction, \textit{wavelet transform} with coefficient reduction, and \textit{foreground texture triangularization}. All three are applied on the input image and finally the one that produces the best quality image is chosen as the output. The effect of applying different encodings is illustrated in Figure~\ref{fig:block7}.
+
+
+\begin{figure}[!thb]
+    \begin{center}
+	    \includegraphics[width=0.49\textwidth]{img/dct_vs_wavelet.pdf}
+	    \caption{\footnotesize 64x64 resolution building image compressed in high/low quality settings using our customized DCT/Wavelet/Triangle encoding: (a) Original image, (b) DCT 342 bytes, (c) Wavelet high 360 bytes, (d) DCT 1114 bytes, (e) Wavelet 1098 bytes, and (f) triangularization 366 bytes. For a similar compressed image size, DCT preserves less details than Wavelet method. But for low quality settings (about 350 bytes), Wavelet-encoded images have strange color block defects. Triangularization failed to preserves the information in the original image.}
+	    \label{fig:block7}
+	%    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+%\rednote{which one is finally used, how/who decide this?}
+
+\subsection{Discrete Cosine Transform Encoding}
+
+Discrete Cosine Transform (DCT) is a widely adopted image encoding technique. We integrate DCT encoding into our compression system as a baseline encoding option. The benefit of using DCT is that -- by reducing low frequency coefficients of an image (in the DCT transformed space), the resultant compressed image's \textit{appearance} details is removed first, while it \textit{global shape} is preserved. This is useful in usage scenarios when a user wants to preserve the shape of an object in the image more than its detailed appearance.
+
+At the beginning of encoding, we generate a foreground image by using the segmentation map to set the background pixels' intensity of the input image to zero. The image is then down sampled to $64 \times 64$ pixels. To further reduce the size, we make use of the fact that the quality of an image depends more on its brightness information than its color information. During the encoding, at first, an image is transformed into the $\mathrm{YUV}$ space, where $\mathrm{Y}$ represents the brightness information and $\mathrm{U/V}$ represents the image color information. We further down sample $\mathrm{U}$ and $\mathrm{V}$ channels into $32 \times 32$ pixels, while keeping the resolution of $Y$ channel intact. Then DCT is applied on all three channels,  followed by a data-reduction step that sets high frequency components to zero. Finally, the resultant frequency coefficients are compressed using gzip. The data is sent to the beacon along with the blurred background image, which is also encoded using DCT. The size of a DCT compressed image, $\mathrm{S_{DCT}}$ can be expressed as:
+\begin{equation}
+\mathrm{
+S_{DCT} = B(g(d)) + B(g(b))}
+\end{equation}
+
+Where, $\mathrm{B()}$ denotes the bit length, $\mathrm{g()}$ denotes the gzip encoded data size, $\mathrm{d}$ is the DCT transformed (reduced coefficient version) foreground information, and $\mathrm{b}$ is the coefficient of the DCT transformed (blurry) background image data.
+
+At the receiving end, a broadcast image is recovered by superimposing the foreground image and the background image. Note that, the background image needs to have the foreground pixel intensities set to zero, before it is down sampled. This is done to make sure that the foreground pixel intensities are not added up twice.
+
+%By doing this in recovering the image on the receiver's end, the
+
+
+A limitation of this above approach is that, for an image with a uniform dark background and a foreground having more details, DCT may yield a ringing artifact close to the sharp edges, especially in a low quality setting. This problem can be addressed by switching to using wavelet.
+
+%Note that here the background image needs to have the foreground region's pixel intensity set to zero before it gets down sampled. By doing this in recovering the image on the receiver's end, the foreground region pixel intensity won't be added up twice.
+%This is done by adding the pixel intensity value in three channels.
+
+\subsection{Wavelet Encoding}
+
+%The program performs wavelet decomposition on the input image. And
+Wavelet is the second image encoding method that we integrate in the adaptive image encoding process. When compared to DCT, wavelet tends to better handle images whose backgrounds have an uniform intensity. Similar to DCT, the best information reduction parameters are sent to the wavelet encoding module in order to generate the highest quality image under a given storage limit. We adopt global thresholding of the wavelet coefficients and Huffman encoding, based on the method described in~\cite{said1996new}.
+
+Similar to DCT, prior to encoding the foreground image, its background pixel intensities are set to zero to obtain the wavelet data. The down sampled background image (with zero intensity foreground) is also sent along with the wavelet data. At the receiving end, wavelet coefficients are inverse-transformed to generate the foreground image and then superimposed on the background image to render the final image.
+
+%the program reverse transformed the wavelet coefficient information to generate the foreground image. The foreground image is superimposed on the background image to generate the final image.
+
+The size of a wavelet compressed image $\mathrm{S_{W}}$ is as follows:
+\begin{equation}
+\mathrm{S_{W} = B(H(w)) + B(g(b))}
+\end{equation}
+
+where, $\mathrm{H()}$ denotes the Huffman encoded data, and $\mathrm{w}$ denotes the reduced wavelet coefficients on the wavelet transformed foreground image. All other symbols carry the same meaning as discussed in the previous section.
+
+
+The weakness of wavelet encoding is that, for limited storage requirements ($<$ 500 bytes), a wavelet encoded image may have unrealistic texture patches after decoding.
+
+\subsection{Triangularization-Based encoding}
+
+Both DCT and wavelet encodings blend the geometric information and texture information of the foreground image. However, for some cases, an accurate texture information and a fine-grained boundary representation are not necessary. For example, a ``football" image's foreground texture and shape could be decoupled. For a viewer to understand that the image is about a ``football", a repeated patch of a football's surface texture along with an approximate ``football" shape information would suffice. Both DCT and wavelet would encode too much redundant information for such an image. To address this, we designed a triangularization-based image encoding method, which consists of three stages: triangularization, triangle reduction, and color/texture filling. These are illustrated in Figure~\ref{fig:tri}, and are described as follows:
+
+\begin{figure}[!thb]
+    \begin{center}
+	    \includegraphics[width=0.45\textwidth]{img/triangularization_process.pdf}
+	    \caption{\footnotesize The process of Triangularization-based encoding.}
+	    \label{fig:tri}
+	%    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+\begin{enumerate} %[leftmargin=10pt]
+	\vspace{.5em}
+	\item \textit{Triangularization:} Given an input image with the foreground/background segmentation, the first step is to generate a binary \textit{boundary map} from the segmentation map, in which, only the pixels on the segmentation boundary have an intensity of 1. A Delaunay triangularization~\cite{de2000computational} is performed on the boundary map. The parameters are chosen to produce a high number of triangles to capture boundary details.
+
+	\vspace{.5em}
+	\item \textit{Triangle Reduction:} Having a set of triangles, the next step is to reduce the number of vertices, iteratively, one vertex at a time. For this, we compute the sum of distances for every vertex from its nearest 3 neighbors, and then remove the one with the minimum sum of distances. The intuition behind this process is that --  a region of vertices group together densely because of the non-smooth boundary in the boundary image. Since the goal of removing vertices is to reduce the details and preserve the general shape information, we should pick a vertex from dense regions.
+
+	\vspace{.5em}
+	\item \textit{Color/Texture Filling:} We provide two options for filling a triangle -- with texture or with a single color. For texture, we choose to fill all triangles with a limited set of textures which are derived from regions surrounded by each triangle. To reduce the number of textures, we take an average of textures from different triangles. Fig.~\ref{fig:texture} shows the process. For each triangle, we transform it to a fixed-size triangle by an affine transform, and then compute one or two average textures for all triangles. For the case of two textures, we apply k-means algorithm.
+\end{enumerate}
+
+The size of the compressed image using triangularization encoding with color filling $\mathrm{S_{Tc}}$, and with texture filling $S_{Tt}$ are as follows:
+\begin{equation}
+\mathrm{S_{Tc} = B(g([v, c, f]) + B(g(b))}
+\end{equation}
+\begin{equation}
+\mathrm{S_{Tt} = B(g([v, c, i]) + B(g(t)) + B(g(b))}
+\end{equation}
+
+
+Here, $\mathrm{v}$ denotes the location of the vertices, $\mathrm{c}$ denotes the connectivity list, $\mathrm{f}$ denotes RGB color values, $\mathrm{i}$ denotes the texture index, and $\mathrm{t}$ denotes the reduced DCT coefficients on the texture patch transformed using DCT. All other symbols carry the same definition as in previous sections.
+
+\begin{figure}[!thb]
+    \begin{center}
+	    \includegraphics[width=0.49\textwidth]{img/texture.pdf}
+	    \caption{\footnotesize Triangle texture averaging process.}
+	    \label{fig:texture}
+	%    \vspace{-1em}
+    \end{center}
+\end{figure}
+
+\section{Empirical Evaluation}
+\label{sec:eval}
+
+In this section, we describe a series of empirical evaluations. First, we evaluate the performance of IMU-guided multiple view capture and depth-refine segmentation. Then our image compression approach is compared with JPEG encoding. After that, we describe a set of results that quantifies the trade-offs between the beacon system lifetime and image quality, when the image type and number of beacons are varied. We also perform a full system evaluation involving real users, which is described in Section~\ref{sec:deployment}.
+
+%We describe two types of experiments. First, the patch-based image compression approach is compared with JPEG encoding. Second, a set of empirical results are described that quantifies tradeoffs between the device lifetime and the image quality, when the image type, number of beacons, patch function type, number of patches, and grid or patch size are varied. Third, we perform a full system evaluation where a group of participants use the system in two scenarios: using the smartphone application to draw, preview, write into, and read from a set of image beacons, and beacon guided navigation in a multi-floor indoor setting.
+
+%Describe (1) the set of image types, counts, image sizes,
+% (2) beacon device spec (processor, memory etc),
+%(3) BLE settings (signal strength, packet interval),
+%(4) anything else appropriate (e.g. how many beacons used)
+
+%Define metrics of evaluation: (1)Image quality and (2)Lifetime, how they are calculated.
+
+\subsection{Experimental Setup}
+
+%Device
+In all of our experiments, we have used Estimote model REV.F2.3 Radio Beacon~\cite{ESTIMOTE} having a 32-bit ARM Cortex M0 CPU, 256 KB flash memory, 4 dBm output power, 40 channels (3 for advertising), and 2.4-2.4835 GHz operating frequency. We vary the BLE broadcast interval for a beacon between 100 ms to 2,000 ms. However, an encoded image (broadcasted from multiple beacons) reaches a user's device in less than 1 second. The transmission power is set to -12 dBm, which limits the range of each beacon to about 30 meters. The image writing and reading application runs in a Nexus 5 smartphone having a 2.26GHz quad-core Qualcomm Snapdragon 800 processor, 2 GB RAM, BLE v4, and runs Andriod 6. We mimic BLE 5.0 broadcast packets by a set of rolling BLE 4.0 packets. The rolling mechanism is implemented by configuring the Estimote Location beacons to broadcast customized advertising packets. The customized data is received from an Android compatible LightBlue Bean device~\cite{LBB} via the beacon's GPIO, configured as an UART interface.
+
+%iPhone 5s having an ARM v8 based dual-core 1.3 GHz Cyclone CPU, Apple A7 chipset, 1 GB DDR3 RAM, BLE v4.0, and runs iOS 9.2.
+
+
+%Imge Data
+
+%Metric
+
+%By set the constraint that the data has to be transferred from beacon to the receiver every 1 second, we would like to know how the approximated image quality varies when the power consumption of the beacon changes. The power consumption on a beacon device depends on two numbers: the broadcasting frequency and the broadcasting strength. The broadcasting frequency determines how long in average a receiver (usually a cell phone that supports Bluetooth low energy) can get the broadcasted signal. The higher broadcasting frequency results in a shorter battery life. Since a beacon device has a limited broadcasting range, if the receiver is moving and it does not stay long enough within the beacon's broadcasting range, it has a chance not able to get the data stored in that beacon. The broadcasting strength determines the radius of the beacon's broadcasting range. An optimal setting of broadcasting interval and the broadcasting strength varies on the application.In the experiment, we fixed the broadcasting interval to be -12 dBm and we varied the broadcasting interval from 2000ms to 100ms. This will result in a set of increasing numbers data volume under a fixed transmission period.
+
+We use four types of images in our experiments: images containing road signs, common indoor and outdoor objects, and buildings. Examples of these images are shown in Figure~\ref{fig:testimages}. Indoor object images are taken from a 50cm - 150cm distance. Outdoor objects and signs are taken from 2m to 5m distance. Building images are taken from far. All images are cropped into square shaped images, and are down-sampled to $288\times288$ pixels prior to compression for a fast disparity map and watershed result computation. Each image is down sampled to $64\times64$ pixels before writing into the beacon system.
+
+%These are the final resultant images that are broadcasted by the beacons.
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .45\textwidth]{img/grid.png}
+		\caption{Test images used in the empirical evaluation.}
+		\label{fig:testimages}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+The two main metrics that are used in the experiments are structural similarity (SSIM) scores, and device lifetime in months. We measure these two under different conditions and show their tradeoffs. The structural similarity scores are used to measure the quality of the produced images when compared to the original ones. The device lifetime is estimated from its relation to a beacon's transmission frequency. Before each experiment, we program the beacons to set a transmission frequency and use the corresponding estimated device lifetime (as reported by the Estimote beacon API) in our experiments.
+
+%based on the transmission frequency, which is the same as the data volume that can be transmitted to the receiver in 1 second (under the assumption that the beacon device has a fixed broadcasting packet size but a much larger internal memory so that the packet data can be changed into different contents in the internal memory in different broadcasting cycle). The lifetime is measured in months.
+
+%We focused on the relationship between approximated image qualities with the patch-based approximation method versus the beacon battery life.
+
+%The image quality are evaluated based on the SSIM score between the approximated image and the original image. And the battery lifetime is computed based on the transmission frequency, which is the same as the data volume that can be transmitted to the receiver in 1 second (under the assumption that the beacon device has a fixed broadcasting packet size but a much larger internal memory so that the packet data can be changed into different contents in the internal memory in different broadcasting cycle). The lifetime is measured in months.
+
+%The allowed data volume to be transmitted depends on the encoding of the image data. The encoding size is based on the image patch size and the image patch set size. Finally, different pairs of patch size and patch set size determine the approximated image.
+%We examined the impact on this relationship from the change of other parameters: the type of the image being approximated, the number of beacon devices, the method of patch generation, the size of the patch set (if using k-means method) and the size of the patch. The results are detailed in the following subsections.
+
+\subsection{Performance of IMU-Guided Multiple View Capture}
+
+We evaluate the accuracy and time to capture multiple views with and without the guidance of IMU. Recall that, the regression tree model takes IMU data and predicts if the current smartphone positioning is good for taking an image for depth estimation, given an already taken image. In the evaluation, for each test, a set of images and their corresponding IMU readings are recorded. If the predicted image produces the best segmentation result when compared to other images in the set, we record this test result as a `hit', otherwise, a `miss'. The accuracy of prediction is determined by the ratio of `hits' to total tests. A total of four tests are performed separately for indoor and outdoor objects. For indoors, there is 1 miss over 4 tests, whereas for outdoors, the model correctly identifies the best image pair for all tests. The model for outdoor objects is more robust since the smartphone's rotation angle shows smaller variations and usually the phone is held vertical. Indoors, users often take pictures of an object from its above, from its below, or from the same hight, which results in a large variation in angles.
+
+%Figure~\ref{fig:accuracy_bar} (left) shows the model accuracy for indoor and outdoor objects.
+
+Figure~\ref{fig:accuracy_bar} shows the expected time for finding a good pair of images with and without the assistance IMU. We observe that the average time to obtain the depth map from a pair of images takes about 2 seconds, which includes the time to focus, raw image processing, and disparity map computation. Since the IMU-guided system predicts a good pair in real time, it significantly decreases the time from 8 seconds to 2-2.5 seconds.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.42\textwidth]{img/accuracy_cropped.pdf}
+		\caption{Performance of IMU-guided view capture.}
+		\label{fig:accuracy_bar}
+	\end{center}
+\end{figure}
+
+%We train our regression tree model using 5 sets of data. We then performed by 4 tests. This is done separately on indoor object images and outdoor object images.
+
+\subsection{Performance of Depth-Refined Segmentation}
+
+We compare our depth-refined segmentation method against a segmentation approach that is purely based on the depth map. We use intersection over union (IoU) as the evaluation metric. We tested our segmentation method on 20 images of four types: road signs, buildings, indoor and outdoor objects. For each set, we manually generate the ground truth segmentation. Figure~\ref{fig:seg_bar} shows the result. We observe that our segmentation technique, which combines depth information and watershed segmentation information, outperforms depth-only approach by up to $26\%$. Our method performs better in cases where the object and the background has larger difference in depths, e.g., signs and indoor objects.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/seg_bar_cropped.pdf}
+		\caption{Performance of depth-refined segmentation.}
+		\label{fig:seg_bar}
+	\end{center}
+\end{figure}
+
+
+\subsection{Comparison with JPEG}
+
+% We pick the image of an apple as the test image.
+
+In this experiment, we compare our proposed image encoding method with JPEG. For an in-depth illustration, we use the picture of an apple as our test image. We compare four different options of our adaptive image encoding methods in the comparison, i.e. DCT-based, wavelet-based, triangularization with color filling, and texture filling. We measure the quality of a compressed image using Structure Similarity (SSIM)~\cite{wang2004image}. A SSIM score ranges from 0 to 1, and two identical images have the best SSIM score of 1. We compute the SSIM value between every compressed image and the original image. We plot the SSIM versus compressed image size in bytes in Figure~\ref{fig:vs_jpeg}.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = 0.49\textwidth]{img/vs_jpeg_cropped.pdf}
+		\caption{Image quality versus image size for different encoding methods.}
+		\label{fig:vs_jpeg}
+	\end{center}
+\end{figure}
+
+The result suggests that JPEG is able to generate a compressed image with a higher quality (SSIM close to 1). However, such a high quality image has the size larger than 2 KB. When JPEG is set to compress an image into lower than 1KB, the image quality drops sharply. On the other hand, our image compression method is based on foreground/background separation. The background in a compressed image is always blurred. This makes our method impossible to get a high SSIM score larger than 0.8. But our method is able to allocate bits more efficiently under a tight space constraint. This makes our method (when using wavelet/DCT encoding) outperform JPEG when the compressed image size is about 800 bytes. The plot also shows that our method can compress an image into as low as 240 bytes (left most point on the wavelet method curve), which is impossible with JPEG, even in its lowest quality setting.
+
+Triangularization with color filling option performs the best for this test case, and the compressed image size stays less than 500 bytes, while triangularization with texture filling encoding fails to generate a good compressed image.
+
+Besides JPEG, we also studied several other image compression techniques~\cite{mohamed1995binary}\cite{zahir2007new}\cite{zahir2005new}. But none of these yield suitably small sized images.
+
+
+%Before the experiment, we would like to compare our image encoding method against the standard image encoding method JPEG. We plot the image quality versus image size for images encoded with our method and image encoded with JPEG. The result is shown in Fig. XXX. The result suggests that JPEG generates better quality images in general. But it also requires the image size to be larger (for a 64x64 binary image, the JPEG encoded image in the lowest quality setting 464 bytes). Our patch-based encoding generates data in smaller size (~30 bytes to ~200 bytes), making it possible to be stored in a beacon device.
+
+\subsection{Effect of Image Type}
+
+In this experiment, we test how our image encoding method's performance changes as we vary the type of input images. We consider four categories of images, i.e., road signs, buildings, indoor objects, and outdoor objects. For each image, our algorithm selects the best compressed image from different versions of the adaptive encoded images based on SSIM score. Then we compute the average image quality for a given lifetime for each category of images. We simulate a BLE 5.0 beacon in this experiment to store and read the images. We limit our system to deliver the image data within 0.5 second from one beacon.
+
+The result shown in Figure~\ref{fig:diff_types} suggests that, on average, indoor object images achieves the best quality over all types. The building images are best approximated if the beacon system broadcasts packets at a higher frequency, sacrificing the system life time. The road sign images have relatively lower quality than other images, but they tend to last for up to 28 months on a single battery.
+
+%We conduct an experiment to measure how the patch-based image encoding method's performance (in terms of quality) changes when the type of input images is varied. The three types of images we use include hand-written alpha-numeric characters, basic geometric shapes, and arbitrary binary images containing complicated shapes and curves. For each type, we compute the average image quality for a given lifetime. We use three beacons in this experiment to store and read images.
+
+\begin{figure}[!htb]
+		\vspace{-1em}
+	\begin{center}
+		\includegraphics[width = 0.49\textwidth]{img/diff_types_cropped.pdf}
+		\caption{Image quality versus beacon battery life for different image types.}
+		\label{fig:diff_types}
+	\end{center}
+	%\vspace{-1.5em}
+\end{figure}
+
+%Figure~\ref{fig:plot1} shows that the image quality drops when the beacon's power consumption is reduced to target a prolonged device lifetime. A longer lifetime limits the broadcasting frequency, and as a result, the amount of data we can transmit within a fixed period (1 second in our setting) is reduced-- resulting in a poor quality encoding that uses less amount of bytes. This can however be fixed by allowing a longer image transmission delay (i.e. more than 1 second wait-time for the reader application). We also notice that the basic geometric shapes and alpha-numeric characters achieve very high structural similarity scores under all power settings. This happens since their sub images are very similar to the patches. However, the system does not perform its best when tested with arbitrary, complex binary images (specially the ones with a lot of dark regions).
+
+\subsection{Effect of Number of Beacon Devices}
+
+We explore the impact of the number of beacons on image quality. Since each beacon in a system of beacons can be set to broadcast different parts of an image, the more beacons we have, the better quality images we can generate by utilizing the additional space. This is based on the assumption that the image loading time and the device lifetime requirements are fixed.
+
+In this experiment, we vary the number of beacons, and record the SSIM of the best quality compressed image generated by our system. The best image is chosen from the adaptive-encoding results with the highest SSIM score.
+
+We plot the SSIM scores for various expected system lifetime in Figure~\ref{fig:n_beacons}. The experiment results suggest that as the number of beacons is increased from 1 to 3, for the beacon system to have an expected lifetime of e.g., 32 months, the quality of produced images also increases from 0.45 to 0.69.
+
+%We investigate the impact of limitations of the number of beacon devices on the approximated image quality. In our implementation, we used the Eddystone URL beacon packet format and we used URL address storage space to store the custom image data. Each data packet broadcasted from a beacon has 16 bytes image data (XXX may go into details talking about remainder bits for beacon id). More number of beacons result in more data to be broadcasted at a given time period. This leads a smaller broadcasting frequency under the same quality requirement. The experiment used the hand-written input image.
+
+\begin{figure}[!htb]
+		\vspace{-1em}
+	\begin{center}
+		\includegraphics[width = 0.45\textwidth]{img/diff_n_beacons_cropped.pdf}
+		\caption{Image quality versus device lifetime for various number of beacons.}
+		\label{fig:n_beacons}
+	\end{center}
+%	\vspace{-2.5em}
+\end{figure}
+%
+%\subsection{Effect of Patch Function Type}
+%
+%In this experiment we compare three patch generation methods. The first one is the proposed $k$-means based approach that considers multiple spirals. The second one uses only a single spiral, and the third one generates patches from a standard test dataset for hand-written characters MNIST~\cite{lecun1998mnist}. To generate patches, we up-scale the images to $64 \times 64$, adjust intensity, and dilate the background. Then we divide each image into patches and run $k$-means on the patches.
+%
+%%In the Algorithms section we discussed the method of using k-means on spiral image patches in generating a set of patches. Here we compared the patch set generated using "spiral k-means" against the patches from a single spiral image, and the patches generated using k-means on a subset of MNIST [xxx refs] database images. For the "MNIST" k-means patches, we up-scaled the 28x28 images into 64x64, adjust the intensity and dilate the background regions. Then we divided each image into patches, and performed k-means algorithm on the patches.The result suggests that for the hand-written ``2" digit input image; k-means patches from MNIST database gives a better performance. (XXX test it on other type of images)
+%
+%\begin{figure}[!htb]
+%	\vspace{-1em}
+%	\begin{center}
+%		\includegraphics[width = 0.49\textwidth]{fig/plot3.pdf}
+%		\caption{Image quality versus lifetime for different patch generation methods.}
+%		\label{fig:plot2}
+%	\end{center}
+%	\vspace{-1.5em}
+%\end{figure}
+%
+%From Figure~\ref{fig:plot2} we observe that patches generated from MNIST dataset performs the best for alpha-numeric characters. This is expected since MNIST is designed specifically for handwritten digits. Our multiple spiral-based method performs better for basic shapes, and both algorithms perform similar when tested with arbitrary images. This shows that having prior knowledge helps, but even if we do not have have it, our method performs reasonably well.
+%
+%\subsection{Effect of Patch Set's Size}
+%
+%An important parameter of the beacon system is the size of the patch set, which is same as the number of clusters $k$ in k-means clustering. A larger patch set is more capable in representing an input image, but requires more bits to encode the image. This leads to a higher broadcasting frequency (given the 1 second bound on the maximum transmission latency), and more power consumption. So, it is important to find a good  value for $k$. Figure~\ref{fig:plot4} shows image quality versus device lifetime for various $k$. The plot shows that $k=64$ almost always outperforms others as expected. The other two values of $k$ also perform reasonably well (0.65--0.7 when expected lifetime is between 20--40 months). Note that $k = 128$ is not applicable to our setup (i.e., 3 beacons and 1 second latency) since this would require an excessive amount of space to store an image.
+%
+%\begin{figure}[!htb]
+%		\vspace{-1em}
+%	\begin{center}
+%		\includegraphics[width = 0.4\textwidth]{fig/plot4.pdf}
+%		\caption{Image quality versus device lifetime for various patch set sizes.}
+%		\label{fig:plot4}
+%	\end{center}
+%	\vspace{-2.5em}
+%\end{figure}
+%
+%%An important parameter in our system is the size of the patch set. This is same as the number of clusters $k$ in running k-means to generate the patches. A larger patch set will have a better ability to represent any incoming image. But it also requires a longer bit length to encode the image. This will leads to a higher broadcasting frequency and therefore a higher power consumption. So it is meaningful to perform experiments to find a good $k$. Fig. XXX shows the result image quality versus beacon battery life, using the hand-written input image and 3 beacons. The plot shows that besides the $k=16$ case, other number of $k$'s have more similar performance, while $k=64$ outperforms others in more than half of the beacon battery life settings.
+%
+%\subsection{Effect of Grid Size}
+%
+%Similar to the patch set's size, the grid size used to divide a spiral image to produce different sizes of patches also has impacts on the image quality and the encoded image's size. Using smaller patches results in high resolution image encoding, but the size of the encoded image will be larger. For example, a grid size of 1 pixel results in an exact replica of the original image. Figure~\ref{fig:plot5} shows the system's performance for different grid sizes. Using 3 beacons and a grid size of 4 pixels, the system cannot encode images when the desired device lifetime life is more than 20 months, but produces best quality images for shorter expected lifetimes.  With a grid size of 8 pixels, the system would last for about 50 months and will perfprm consistently well to produce images having about 0.75 structural similarity scores. Using larger grids (16 and 32 pixels) results in even longer device lifetime, but the quality of images degrades to $0.5$.
+%
+%%Other two grid sizes (16 pixels and 32 pixels) can be encoded under any battery life requirement but their approximation quality does not increase given a higher power consumption limit.
+%
+%
+%%Similar to subsection E, the grid (patch) size also impacts both the image quality and encoded data size. Larger patch size results in a smaller data but lesser "resolution" in the approximation (grid size = 1 pixel will make the approximation the same as the original image). We used the hand written ``2? image and 3 beacons in the experiment.
+%
+%%Figure~\ref{fig:plot5} shows the system's behavior for different grid sizes. For grid size = 4 pixels, it cannot be encoded by 3 beacons under desired beacon battery life about 20 months. But it gives a best quality image under a short battery life.  When grid size = 8 pixels, it can encode the image for battery life until the battery life requirement reaches 50 months. Other two grid sizes (16 pixels and 32 pixels) can be encoded under any battery life requirement but their approximation quality does not increase given a higher power consumption limit.
+%
+%\begin{figure}[!htb]
+%	\vspace{-1em}
+%	\begin{center}
+%		\includegraphics[width = 0.4\textwidth]{fig/plot5.pdf}
+%		\caption{Image quality versus device lifetime for various grid sizes per patch.}
+%		\label{fig:plot5}
+%	\end{center}
+%	\vspace{-1.5em}
+%\end{figure}
+%
+%
+
+
+\section{Real Deployment}
+\label{sec:deployment}
+
+We deploy an image beacon system in an indoor environment to evaluate the ability of image beacons in delivering visual information of various real-world objects. An approximated image stored in the beacon system contains an object's shape as well as its texture information. The goal of this deployment experiment was to understand how an image beacon system delivers these two kinds of information of an image.
+
+To have a subjective measure of the performance of an image beacon system, we conduct a user study involving $20$ participants. Each participant is given a smartphone that receives image broadcasts from four different beacons placed inside a room. The goal of the user is to identify the objects in all four images, and then locate them in the room.
+
+%We would like to know how the image broadcasted by the beacon system delivers these two types of information.performance of the proposed image beacon system in a real world setting, we To evaluate the full-system, we conducted an experiment of real deployment. We would like to exam the beacon system's ability of delivering information about real-world objects. An approximated image could contain an object's shape information and texture information. We would like to know how the image broadcasted by the beacon system delivers these two types of information.
+
+The four broadcasted images are of an apple, a chair, a text book and a computer mouse. For each image, we compress it under three size constraints: 256 bytes, 512 bytes, and 768 bytes, and obtain the best quality image produced by our compression algorithm under the constraint. The images compressed in three levels along with the original image are shown in Figure~\ref{fig:compression_mat}. We choose these sizes to mimic 1, 2, and 3 BLE 5.0 beacons, respectively; but our actual implementation used a rolling mechanism with BLE 4.0 (connected with an Arduino), as described earlier. Each user is progressively shown a better quality image until he is able to identify the object in the room.
+
+We make sure that there are at least 3 objects in the room that are similar to the one that the user is looking at on his phone. To test if an object's texture details are preserved, for the apple test case, we put another apple having a green/red mixed color and an orange next to it. For the book test case, we put two other similar sized books next to it that have different covers. To test if an object's shape details are preserved, for the chair test case, we add another two chairs of the same color. For the mouse test case, we add an iPhone and a mac mouse. Figure~\ref{fig:confusion} shows photos of the objects along with the objects that we added to introduce confusions.
+
+%Then we place the object with the beacon containing the image of that object in a corner of the room.
+
+The experiment results are shown in Figure~\ref{fig:confusion2}. For each size limit, we plot the number of correct guesses by our participants for various categories of images. We observe that, as expected, when the image size limit is larger, participants tend to perform better. Even with the lowest size, at about 50\% images were always guessed correctly by the participants. Therefore, with 3 or more beacons, the image quality of our system is high enough to let people distinguish very similar objects.
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .45\textwidth]{img/compression_mat.png}
+		\caption{Test images compressed in three quality levels.}
+		\label{fig:compression_mat}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .40\textwidth]{img/confusion.png}
+		\caption{Photos of the object used in the experiment.}
+		\label{fig:confusion}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+
+\begin{figure}[!htb]
+	\begin{center}
+		\includegraphics[width = .45\textwidth]{img/study_cropped.pdf}
+		\caption{Responses from user study.}
+		\label{fig:confusion2}
+	\end{center}
+	\vspace{-1.5em}
+\end{figure}
+
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+In this paper, we described a system involving beacon devices and smartphones with BLE receiving functionality. Our system allows a user to generate an approximation of an input color image, write the approximated image into the very limited beacon device storage, and receive compressed images from beacon devices' broadcast packets. The main contribution of this work is the overall system construction, the adaptive encoding image compression method, the evaluation of various parameters of the system, and quantifying the trade-off between image quality and beacon battery lifetime for our image compression method. Our work widens the usage of the energy efficient, long-lasting beacon devices by allowing easy storage and access of custom image data in scenarios where there is no Internet connection.
+
+Our system will perform at its best with the beacons that adopts the upcoming Bluetooth 5.0 standard. A future work is to evaluate the different aspects of the system performance as the Bluetooth 5.0 is released and gets popular. Moreover, a `fat-beacon' standard is under development at Google, that allows an even higher broadcast transmission capacity for BLE beacons. The goal of that standard is to equip beacon devices with the ability to broadcast basic web contents to smartphones in absence of the Internet connectivity. It will be meaningful to study the application of our image beacon system combined with a fat beacon.
+
+%\rednote{Our system is most useful when the application scenario requires years-long working time without maintenance. In the future, it is meaningful to design a long timescale experiment to analyze the data write-read pattern within a long time period. }
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+%1. the system is not able to capture dynamic objects with a good segmentation
+
+Our proposed image beacon system only considers stationary objects. This is an inherent problem of any depth estimation technique. In such case, we have to resort to texture or color based segmentation.
+
+%2. Could have a better model for indoor IMU-based prediction since indoor prediction accuracy is lower than outdoor
+
+Our IMU-based prediction algorithm uses a regression tree model. Its prediction accuracy is lower indoors than outdoors. A robust model, may train a separate regression tree for different cases, such as one model for taking images on objects below the phone, one model for objects on the same height to the phone.
+
+%3.  marker-controlled watershed method always generates a clean segmentation. Our combined segmentation method does not fully make use of that benefit
+
+A property of marker-controlled watershed segmentation algorithms is that they always generate a clean segmentation result. Our combined segmentation method does not fully exploit this feature. We could further enhance the power of combining depth estimation and watershed results by deploying a smarter foreground region growing method.
+
+%4. GIF (eg moving images) may be supported with some additional optimization for time-domain redudancy
+
+Animated images (e.g., GIFs) are not supported by the system. However, with additional optimization for time-domain redundancy, we believe it is possible to develop image beacons that supports animation.
+
+
+\section{Related Work}
+\label{sec:related}
+
+%In \rednote{This paragraph has not been changed} the author discussed an intelligent system involving beacon devices for Customer Behavior Analysis (CBA). The goal is to show how beacon technology could help gather and classify customer behavior data in retail stores. They deployed the system into a real retailing scenario and collected the data from mobile devices interacting with Beacon devices. They also proposed the further data analysis process on the collected data. \rednote{[?]} talks about an indoor localization system constructed with beacon devices. With multiple beacons places in the environment, the author showed that the error of the estimated location of the object could be as small as 0.53 meters in average. \rednote{[?]} discusses a Beacon occupancy detection system deployed in smart buildings. In the implementation, they modified Apple's iBeacon protocol to better fit their requirement. They showed that with the BLE technology such system could be more energy and cost efficient than previous solutions.}
+
+Previously, a binary image beacon system~\cite{shaoyears} was developed to enable BLE beacons to store and broadcast binary images. The limitation of the system is that it only supports a limited category of binary images such as hand-written characters, shapes, and symbols.
+
+A rich set of image segmentation methods exists in the literature. In the past decade, more modern techniques involving machine learning have been invented. State of art neural-network based method~\cite{zheng2015conditional} can achieve a very accurate result (highest score 90.4 on IoU evaluation on airplane type testing data). The method is based on neural-network and conditional random field. However, this method is computationally expensive to run on a cellphone. Otsu's method~\cite{otsu1975threshold} is based on finding a separation on image pixel intensity histograms, which does not take care of local image structure. Gabor filter segmentation is based on finding edges in an image using Gabor filtering. Marker-controlled watershed methods~\cite{parvati2009image} use mathematical morphology to pre-process the data, followed by a watershed segmentation. This avoids over segmentation, which is a weakness of traditional watershed method.
+
+The notion of foreground / background information can be obtained by disparity estimation with semi-global matching~\cite{hirschmuller2005accurate}. The method enforces  smoothness in the neighbor matching process to reduce matching errors.
+
+Shapiro~\cite{shapiro1993embedded} developed an image encoding technique named embedded zerotree wavelet (EZW) encoding, which is computationally expensive and slow. Said and Pearlman~\cite{said1996new} developed a better wavelet-based image encoding method based on set partitioning in hierarchical trees. This method gives similar image compression performance regarding quality and size, and the same time it achieves a faster computation. We have used this method in our system.
+
+Lu et al.~\cite{lu2000piecewise} introduced a piece-wise linear image encoding method using surface triangularization. Their triangularization algorithm fits the image surface in a top-down manner. The idea is to apply a constrained resource planning to allocate the least amount of triangles while achieving a small image approximation error. Their experiment result shows that the triangularization method compresses images with a compact code length with a guaranteed error bound. But their method's target is to achieve near lossless compression, while our ImageBeacon system is a lossy compression method in general.
